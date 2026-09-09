@@ -35,5 +35,28 @@ services:
     volumes:
       - warehouse:/data
 
+  # Real Postgres for the warehouse and the owned databases; start it with
+  # --profile postgres and point the apps at it with -f compose/postgres.yml.
+  # warehouse.sql is mounted, not copied, so the SQLite and Postgres fixtures share one source.
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: insights
+      POSTGRES_PASSWORD: insights  # pragma: allowlist secret
+      POSTGRES_DB: warehouse
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./sdk/src/insights_platform/data/_fixtures/warehouse.sql:/docker-entrypoint-initdb.d/10-warehouse.sql:ro
+      - ./compose/postgres/20-owned-databases.sh:/docker-entrypoint-initdb.d/20-owned-databases.sh:ro
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insights -d warehouse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   warehouse: {}
+  postgres: {}
