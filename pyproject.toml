@@ -3,6 +3,7 @@ members = ["sdk", "apps/*"]
 
 [dependency-groups]
 dev = [
+    "fakeredis>=2.26",
     "mypy>=1.13",
     "pre-commit>=4.0",
     "pytest>=8.3",

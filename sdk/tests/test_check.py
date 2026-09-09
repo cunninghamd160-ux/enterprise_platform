@@ -157,6 +157,29 @@ def test_raw_driver_rule_catches_from_urllib_import_request(tmp_path: Path) -> N
     assert "urllib.request" in violation.message
 
 
+@pytest.mark.parametrize("module", ["redis", "aioredis", "memcache"])
+def test_raw_driver_rule_names_the_cache_seam_for_cache_drivers(
+    tmp_path: Path, module: str
+) -> None:
+    make_app(tmp_path, "cache-app", f"import {module}\n\nclient = None\n")
+    (violation,) = check(tmp_path)
+    assert violation.rule == "no-raw-drivers"
+    assert violation.adr == "ADR-0003"
+    assert f"apps must not import {module}" in violation.message
+    assert "insights_platform.cache.get_cache()" in violation.message
+    assert "get_connection" not in violation.message
+
+
+def test_raw_driver_rule_catches_from_redis_asyncio_import_once_per_line(tmp_path: Path) -> None:
+    make_app(
+        tmp_path, "redis-app", "from redis.asyncio import Redis\n\nclient: Redis | None = None\n"
+    )
+    (violation,) = check(tmp_path)
+    assert violation.rule == "no-raw-drivers"
+    assert violation.line == 1
+    assert "import redis;" in violation.message
+
+
 def test_sdk_must_not_import_app_packages(tmp_path: Path) -> None:
     make_app(tmp_path, "alpha", "")
     sdk = tmp_path / "sdk" / "src" / "insights_platform"
