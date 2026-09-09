@@ -22,6 +22,7 @@ from insights_platform.observability import (
     REQUIRED_FIELDS,
     _otel,
     configure,
+    fields_of,
     get_logger,
     get_tracer,
 )
@@ -194,3 +195,14 @@ def test_exported_attributes_drop_none_and_keep_stream() -> None:
     assert exported_attrs["connection"] == "warehouse"
     assert "principal" not in exported_attrs
     assert "app" not in exported_attrs
+
+
+def test_fields_of_returns_caller_and_required_fields_only(
+    captured: pytest.LogCaptureFixture,
+) -> None:
+    get_logger(TEST_LOGGER).info("hello", connection="warehouse", n=1)
+    fields = fields_of(captured.records[-1])
+    assert fields["connection"] == "warehouse"
+    assert fields["n"] == 1
+    assert set(REQUIRED_FIELDS) <= set(fields)
+    assert not {"name", "msg", "levelname", "message"} & set(fields)

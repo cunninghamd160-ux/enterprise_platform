@@ -14,6 +14,7 @@ __all__ = [
     "Logger",
     "Scalar",
     "configure",
+    "fields_of",
     "get_logger",
     "get_meter",
     "get_tracer",
@@ -67,6 +68,10 @@ class Logger:
 
 def get_logger(name: str) -> Logger:
     return Logger(name)
+
+
+def fields_of(record: logging.LogRecord) -> dict[str, Scalar]:
+    return {k: v for k, v in vars(record).items() if k not in _RESERVED_KEYS}
 
 
 def get_meter(name: str) -> Meter:
