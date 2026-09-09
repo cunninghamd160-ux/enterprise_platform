@@ -7,7 +7,7 @@ from opentelemetry.metrics import Meter
 from opentelemetry.trace import Tracer
 
 from insights_platform import context
-from insights_platform.observability._otel import configure, current
+from insights_platform.observability._otel import ROOT_LOGGER, configure, current
 
 __all__ = [
     "REQUIRED_FIELDS",
@@ -48,6 +48,8 @@ def _required_fields() -> dict[str, Scalar]:
 
 class Logger:
     def __init__(self, name: str) -> None:
+        if name != ROOT_LOGGER and not name.startswith(f"{ROOT_LOGGER}."):
+            name = f"{ROOT_LOGGER}.{name}"
         self._log = logging.getLogger(name)
 
     def _emit(
