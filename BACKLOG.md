@@ -18,6 +18,9 @@ Sizes: S ≤ half a day, M 1–2 days, L 3–5 days, XL more than a week.
 
 ## What already exists (so the backlog starts from the right place)
 
+Snapshot at the start of the backlog (2026-09-09, before wave 1). The Status column in the
+Sequence table tracks what has landed since; the rows below are not updated.
+
 | Area | Have | Missing |
 |------|------|---------|
 | Auth | `create_app()` installs SSO middleware and the `enforce` dependency before any route (`web.py:34`); boot refuses unmarked routes; every denial audited | Real IdP behind `sso.principal_from_headers`; roles/teams from a directory |
@@ -30,18 +33,18 @@ Sizes: S ≤ half a day, M 1–2 days, L 3–5 days, XL more than a week.
 
 ## Sequence
 
-| # | Epic | Size | Depends on | ADR impact |
-|---|------|------|-----------|------------|
-| E0 | Scrub SQL text and URL query strings from traces | S | — | ADR-0005 must say traces are telemetry too and how they are scrubbed |
-| EA | Async I/O throughout | M | — | **New ADR-0010 Async I/O**; ADR-0001 compat-surface note |
-| E1 | Postgres for shared connections | S | EA | None (registry is dialect-neutral by design) |
-| E2 | Owned per-app database with migrations | L | EA, E1 | **New ADR-0007 Persistence**; ADR-0004 gains "per-tenant owned stores" |
-| E3 | Backend vertical-slice scaffold and layering rules | M | EA; E2 for a meaningful slice | ADR-0002 (template shape), ADR-0003 (new rules) |
-| E4 | Data classification drives enforcement | M | E3 | **New ADR-0008**; ADR-0005 update |
-| E5 | Caching layer: in-memory or Redis | M | EA; E4 (classification gates what may be cached) | ADR-0004 (shared Redis, per-tenant namespaces) |
-| E6 | Frontend scaffold for web apps | XL | E3 for the example page | **New ADR-0009 Frontend delivery** |
-| E7 | Break-glass, real | M | E4 | ADR-0005 evidence |
-| E8 | CLI growth | S each | varies | None |
+| # | Epic | Size | Depends on | ADR impact | Status |
+|---|------|------|-----------|------------|--------|
+| E0 | Scrub SQL text and URL query strings from traces | S | — | ADR-0005 must say traces are telemetry too and how they are scrubbed | Landed #19 |
+| EA | Async I/O throughout | M | — | **New ADR-0010 Async I/O**; ADR-0001 compat-surface note | Landed #20 |
+| E1 | Postgres for shared connections | S | EA | None (registry is dialect-neutral by design) | — |
+| E2 | Owned per-app database with migrations | L | EA, E1 | **New ADR-0007 Persistence**; ADR-0004 gains "per-tenant owned stores" | — |
+| E3 | Backend vertical-slice scaffold and layering rules | M | EA; E2 for a meaningful slice | ADR-0002 (template shape), ADR-0003 (new rules) | — |
+| E4 | Data classification drives enforcement | M | E3 | **New ADR-0008**; ADR-0005 update | — |
+| E5 | Caching layer: in-memory or Redis | M | EA; E4 (classification gates what may be cached) | ADR-0004 (shared Redis, per-tenant namespaces) | — |
+| E6 | Frontend scaffold for web apps | XL | E3 for the example page | **New ADR-0009 Frontend delivery** | Landed #21 (wave-1 spike) |
+| E7 | Break-glass, real | M | E4 | ADR-0005 evidence | — |
+| E8 | CLI growth | S each | varies | None | — |
 
 The user's stated priority is the scaffold (E3, E6). E3 needs E2 to generate a slice that persists
 anything; E6 is independent of E2/E3 technically and runs as a parallel spike from wave 1.
@@ -317,7 +320,7 @@ signatures every agent implements against so parallel work does not collide. Any
 agent's list is off-limits except a small additive edit it reports. Docs (`README.md`,
 `ONBOARDING.md`, `NEXT.md`, this file) are coordinator-owned and updated after each wave merges.
 
-### Wave 1 — parallel: E0, EA, E6-spike
+### Wave 1 — parallel: E0, EA, E6-spike — landed 2026-09-09 (#19, #20, #21)
 
 **E0 `wt/trace-scrub`** owns `sdk/src/insights_platform/observability/_otel.py`, additive edits to
 `observability/__init__.py`, new `sdk/tests/test_trace_scrub.py`.
