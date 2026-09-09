@@ -1,0 +1,22 @@
+# __NAME__
+
+Insights Hub scheduled job owned by team `__TEAM__`. `run_job()` supplies config, data access,
+observability, and the completion metric; this job only implements `main()`.
+
+## Run
+
+    uv sync
+    uv run --env-file .env python -m __PKG__.main
+
+Exit code 0 means `main()` completed; anything else means it raised and the failure was logged.
+
+## Verify
+
+    uv run pytest apps/__NAME__
+    uv run insights check apps/__NAME__
+
+## Container
+
+    docker build -f apps/__NAME__/Dockerfile -t __NAME__ .
+
+The build context is the repository root because the job depends on the SDK through the workspace.

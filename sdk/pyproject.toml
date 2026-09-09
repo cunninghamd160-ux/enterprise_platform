@@ -17,6 +17,12 @@ dependencies = [
     "uvicorn>=0.32",
 ]
 
+[project.scripts]
+insights = "insights_platform.cli:app"
+
+[project.entry-points.pytest11]
+insights_platform = "insights_platform.testing"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
