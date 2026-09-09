@@ -26,14 +26,8 @@ about 140 characters, run `git config core.longpaths true` first or the checkout
 docker compose up
 ```
 
-Then, in another shell:
-
-```sh
-curl localhost:8000/healthz
-curl -i -H 'X-Insights-User: sam'  -H 'X-Insights-Team: finance'          localhost:8000/comp  # 403
-curl    -H 'X-Insights-User: dana' -H 'X-Insights-Team: people-analytics' localhost:8000/comp  # 200
-docker compose run --rm finance-nightly-rollup
-```
+That starts the demo web app on `http://localhost:8080` and the compliance API on `:8000`; the
+walkthrough below drives both and the job. Optional backends:
 
 ```sh
 docker compose --profile postgres -f docker-compose.yml -f compose/postgres.yml up --build
@@ -49,6 +43,69 @@ By default the warehouse is a SQLite file seeded from
 file into a Postgres container, so the two fixtures share one source.
 The HR API is an in-process fake behind any `*.fixture` host. `.env.example` lists every variable the
 fixtures expect; `docker-compose.yml` sets the same values.
+
+## Walkthrough
+
+Fifteen minutes, in the order the brief asks its questions. Every step is something the platform
+does for an app that the app did not write.
+
+1. **A team's day one — reuse mechanism ([ADR-0001](docs/adr/0001-thin-sdk-monorepo.md),
+   [ADR-0002](docs/adr/0002-generate-dont-clone.md)).** `apps/people-analytics-dash` came out of
+   `uv run insights new people-analytics-dash --kind web --team people-analytics` and was changed
+   only in its frontend. Its `platform.toml` is the whole contract with the platform: name, team,
+   kind, `scaffold_version`, `connections`, `[database]`. Its `pyproject.toml` pins the SDK release
+   range. Generate another app and run its tests; nothing else is required.
+
+2. **Sign in — the SSO stub ([ADR-0004](docs/adr/0004-tenant-isolation.md)).** Open
+   `http://localhost:8080`. The sign-in page is the stub for the browser: it stores user, team and
+   roles for the session and sends them as the `X-Insights-*` headers the corporate SSO proxy will
+   set in production. When the real IdP arrives, only `sso.principal_from_headers` changes.
+
+3. **Authorization at the route — enforcement ([ADR-0003](docs/adr/0003-enforcement-placement.md)).**
+   Sign in as `dev` / `people-analytics`: the headcount table loads from `GET /api/records`, a route
+   marked `@require_team("people-analytics")`. Sign out and sign in as team `finance`: the page shows
+   the 403. The compliance app answers the same way:
+
+   ```sh
+   curl -i localhost:8000/comp                                                                  # 401
+   curl -i -H 'X-Insights-User: sam'  -H 'X-Insights-Team: finance'          localhost:8000/comp  # 403
+   curl    -H 'X-Insights-User: dana' -H 'X-Insights-Team: people-analytics' localhost:8000/comp  # 200
+   ```
+
+   A route with no marker does not boot: `create_app()` refuses at startup, and the generated tests
+   hit that check before a deploy does.
+
+4. **Data access the app never constructs — isolation ([ADR-0004](docs/adr/0004-tenant-isolation.md),
+   [ADR-0005](docs/adr/0005-operator-access.md)).** Both apps read the `warehouse` connection they
+   declared. `get_engine()` resolved the credential by name from the app's own environment, set the
+   timeout, and attached the audit hook and instrumentation. Add `httpx.Client(...)` or
+   `create_engine(...)` to an app and `uv run insights check` refuses it, citing the ADR it enforces.
+
+5. **What the platform team can see — operator access ([ADR-0005](docs/adr/0005-operator-access.md),
+   [ADR-0006](docs/adr/0006-observability-otel.md)).**
+
+   ```sh
+   docker compose logs people-analytics-dash | grep -E 'authz.denied|statement_sha256|db.statement'
+   ```
+
+   The denial is an `authz.denied` audit record with the caller's team and the route. The query is a
+   `data.query` record carrying a SHA-256 of the statement, and the trace span's `db.statement` is
+   the same hash: the platform team sees all the telemetry and none of the compensation data. The
+   structured logger refuses a record as a field, so an app cannot log a row by accident.
+
+6. **The batch job — the other consumption model.** `docker compose run --rm finance-nightly-rollup`
+   runs an `async def main()` under `run_job()`: exit code 0, `rollup.completed rows=2`,
+   `job.completed status=ok`, and the same `data.query` audit record for its one query.
+
+7. **The upgrade story ([ADR-0001](docs/adr/0001-thin-sdk-monorepo.md)).** Change anything under
+   `sdk/` on a branch and open a pull request: CI runs lint, types, `insights check` and the tests of
+   every app before a release is cut. Each app pins the release range it runs against and moves
+   within current-minus-two; `sdk-pin-declared` fails the build when a pin excludes the current
+   release.
+
+8. **Deliberate omissions.** [NEXT.md](NEXT.md) lists what is stubbed — SSO, secrets, Kubernetes, a
+   trace backend, real break-glass — each with the trigger that would justify building it, and the
+   facts this build surfaced for the ADRs.
 
 ## Where things are
 
@@ -70,7 +127,8 @@ fixtures expect; `docker-compose.yml` sets the same values.
 │   ├── templates/               what insights new copies, frontend/ included
 │   └── testing/                 pytest plugin for app tests
 ├── apps/
-│   ├── people-analytics-comp/   example web app (kind = web)
+│   ├── people-analytics-comp/   example web app, API only (kind = web)
+│   ├── people-analytics-dash/   demo web app: React frontend at /, SSO-stub sign-in (kind = web)
 │   └── finance-nightly-rollup/  example scheduled job (kind = job)
 ├── docs/adr/                    architecture decision records
 ├── .github/                     CI, reusable app-check workflow, CODEOWNERS
@@ -159,8 +217,8 @@ The five that matter most:
 
 ## Status
 
-The SDK, CLI, rules, frontend scaffold, both example apps, CI matrix, and compose deployment are
-complete and tested. `BACKLOG.md` is the post-submission plan; wave 1 (trace scrubbing, async I/O,
+The SDK, CLI, rules, frontend scaffold, the two example apps and the demo web app, CI matrix, and
+compose deployment are complete and tested. `BACKLOG.md` is the post-submission plan; wave 1 (trace scrubbing, async I/O,
 the frontend scaffold) and wave 2's database and cache have landed; the slice scaffold and its
 layering rules are on branch `wt/slices` pending their owned-database phase. ADRs 0001–0006, 0007,
 0009 and 0010 are drafts — each opens with a `DRAFT` marker — pending the author's rewrite.

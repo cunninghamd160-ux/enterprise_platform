@@ -123,6 +123,10 @@ SSO is a stub. Identity arrives in three headers:
 | `X-Insights-Team`  | the caller's team                        |
 | `X-Insights-Roles` | comma-separated roles                    |
 
+From a browser there are two stubs for the same headers: the generated frontend's Vite dev proxy
+sets them from `frontend/.env.local`, and `apps/people-analytics-dash` shows a sign-in page that
+stores them for the session. In production the SSO proxy sets them and neither exists.
+
 Every route must carry exactly one kind of marker:
 
 ```python
