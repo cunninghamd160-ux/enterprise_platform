@@ -35,8 +35,18 @@ curl    -H 'X-Insights-User: dana' -H 'X-Insights-Team: people-analytics' localh
 docker compose run --rm finance-nightly-rollup
 ```
 
+```sh
+docker compose --profile postgres -f docker-compose.yml -f compose/postgres.yml up --build
+docker compose --profile cache up -d redis
+```
+
+The first runs the warehouse and each app's owned database on Postgres instead of the SQLite
+fixture; the second adds a shared Redis for apps that set `INSIGHTS_CACHE_URL`.
+
 SSO, the warehouse, and the HR API are stubs. Identity comes from `X-Insights-*` request headers.
-The warehouse is a SQLite file seeded from `sdk/src/insights_platform/data/_fixtures/warehouse.sql`.
+By default the warehouse is a SQLite file seeded from
+`sdk/src/insights_platform/data/_fixtures/warehouse.sql`; the `postgres` profile mounts the same
+file into a Postgres container, so the two fixtures share one source.
 The HR API is an in-process fake behind any `*.fixture` host. `.env.example` lists every variable the
 fixtures expect; `docker-compose.yml` sets the same values.
 
@@ -47,14 +57,16 @@ fixtures expect; `docker-compose.yml` sets the same values.
 ├── sdk/src/insights_platform/   the SDK
 │   ├── auth/                    SSO stub, authorization markers, enforcement, boot-time route check
 │   ├── data/                    connection registry, get_connection(), fixtures
+│   ├── db/                      the app's owned database: get_session(), Base; migrations via insights db
+│   ├── cache/                   get_cache(): memory or Redis behind one instrumented seam
 │   ├── observability/           OpenTelemetry behind a structured logger; console or OTLP export
 │   ├── audit.py                 audit stream for denials and data access
 │   ├── config.py                platform.toml -> AppConfig
 │   ├── web.py                   create_app()
 │   ├── job.py                   run_job()
 │   ├── frontend.py              mount_frontend(): a web app's built SPA at /
-│   ├── check/                   the eight enforcement rules
-│   ├── cli/                     insights new (--no-frontend), insights check
+│   ├── check/                   the nine enforcement rules
+│   ├── cli/                     insights new (--no-frontend), insights check, insights db
 │   ├── templates/               what insights new copies, frontend/ included
 │   └── testing/                 pytest plugin for app tests
 ├── apps/
@@ -62,7 +74,8 @@ fixtures expect; `docker-compose.yml` sets the same values.
 │   └── finance-nightly-rollup/  example scheduled job (kind = job)
 ├── docs/adr/                    architecture decision records
 ├── .github/                     CI, reusable app-check workflow, CODEOWNERS
-├── docker-compose.yml           local deployment
+├── docker-compose.yml           local deployment; postgres and cache profiles
+├── compose/                     the postgres override and its init script
 ├── ONBOARDING.md                day one for a new team
 └── NEXT.md                      deliberate omissions and findings
 ```
@@ -75,6 +88,7 @@ fixtures expect; `docker-compose.yml` sets the same values.
 | What tenants share               | [ADR-0004 Tenant isolation](docs/adr/0004-tenant-isolation.md)     |
 | What the platform team can see   | [ADR-0005 Operator access](docs/adr/0005-operator-access.md)       |
 | How telemetry leaves an app      | [ADR-0006 Observability: OpenTelemetry as the wire contract](docs/adr/0006-observability-otel.md) |
+| Why apps get an owned database   | [ADR-0007 Persistence](docs/adr/0007-persistence.md) (draft)     |
 | Why the page ships with its app  | [ADR-0009 Frontend delivery](docs/adr/0009-frontend-delivery.md) (draft) |
 | Why the data seam is async only  | [ADR-0010 Async I/O](docs/adr/0010-async-io.md) (draft)          |
 | Day one for a new team           | [ONBOARDING.md](ONBOARDING.md)                                     |
@@ -95,12 +109,19 @@ fixtures expect; `docker-compose.yml` sets the same values.
   a client ([ADR-0005](docs/adr/0005-operator-access.md)). The objects are async — a SQLAlchemy
   `AsyncEngine`, an `httpx.AsyncClient` — and `run_job()` runs an `async def main()`; there is no
   sync variant ([ADR-0010](docs/adr/0010-async-io.md)).
+- `db.get_session()` and `cache.get_cache()` are built the same way: a URL by name from the
+  environment (`INSIGHTS_DB_URL`, `INSIGHTS_CACHE_URL`), mandatory timeouts, an audit hook that
+  records table names and row counts or key hashes but never values, and OpenTelemetry. Schema
+  changes are Alembic migrations run through `insights db`; on the SQLite fixture the schema comes
+  from the models ([ADR-0007](docs/adr/0007-persistence.md),
+  [ADR-0004](docs/adr/0004-tenant-isolation.md)).
 - Traces are scrubbed before export, whether to the console or over OTLP: `db.statement` becomes
   the same SHA-256 the audit stream records and URLs lose their query strings, so a trace backend
   sees no literal either ([ADR-0005](docs/adr/0005-operator-access.md)).
-- `insights check` runs eight rules, each citing the ADR it enforces: `no-raw-drivers`,
+- `insights check` runs nine rules, each citing the ADR it enforces: `no-raw-drivers`,
   `no-client-construction`, `use-create-app`, `no-private-imports`, `apps-independent`,
-  `manifest-valid`, `scaffold-supported`, `sdk-pin-declared`. The rules live inside the SDK and reach
+  `manifest-valid`, `scaffold-supported`, `sdk-pin-declared`, `no-raw-alembic`. The rules live
+  inside the SDK and reach
   apps through three
   entry points: the pre-commit hook, the CLI, and the CI matrix
   ([ADR-0003](docs/adr/0003-enforcement-placement.md)).
@@ -139,6 +160,7 @@ The five that matter most:
 ## Status
 
 The SDK, CLI, rules, frontend scaffold, both example apps, CI matrix, and compose deployment are
-complete and tested. `BACKLOG.md` is the post-submission plan; its wave 1 — trace scrubbing, async
-I/O, the frontend scaffold — has landed. All eight ADRs (0001–0006, 0009, 0010) are drafts — each
-opens with a `DRAFT` marker — pending the author's rewrite.
+complete and tested. `BACKLOG.md` is the post-submission plan; wave 1 (trace scrubbing, async I/O,
+the frontend scaffold) and wave 2's database and cache have landed; the slice scaffold and its
+layering rules are on branch `wt/slices` pending their owned-database phase. ADRs 0001–0006, 0007,
+0009 and 0010 are drafts — each opens with a `DRAFT` marker — pending the author's rewrite.

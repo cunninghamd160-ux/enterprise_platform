@@ -19,7 +19,8 @@ uv run pre-commit install
 cp .env.example .env
 ```
 
-`.env` holds the connection variables the SDK reads at startup (`INSIGHTS_CONN_*`) and the optional
+`.env` holds the connection variables the SDK reads at startup (`INSIGHTS_CONN_*`), the owned
+database URL (`INSIGHTS_DB_URL`), the optional cache URL (`INSIGHTS_CACHE_URL`), and the optional
 OTLP endpoint. Every value in `.env.example` points at a fixture: a SQLite warehouse under `.local/`
 and an in-process HR API. Nothing in it is a real credential.
 
@@ -51,6 +52,7 @@ apps/reporting-dash/
 ├── pyproject.toml                    pins the SDK release range; resolved through the workspace
 ├── README.md                         how to run, verify, and build this app
 ├── frontend/                         Vite + React + TypeScript; a Records page over /api/records
+├── migrations/                       Alembic env.py and 0001_records; run through insights db
 ├── src/reporting_dash/__init__.py
 ├── src/reporting_dash/main.py        create_app() plus GET /api and GET /api/records, or async main()
 └── tests/test_main.py                passes as generated
@@ -65,6 +67,9 @@ team = "reporting"               # your team; sets the tenant on every log line 
 kind = "web"                     # web or job; create_app() and run_job() refuse the other
 scaffold_version = "0.1.0"       # the template version that generated this app
 connections = ["warehouse"]      # every connection you will call get_connection() for
+
+[database]
+enabled = true                   # an owned database, reached through INSIGHTS_DB_URL
 ```
 
 `scaffold_version` records what generated the app so a future `insights upgrade` knows which
@@ -203,6 +208,90 @@ The first rule you will meet: do not call `httpx.AsyncClient(...)`, `httpx.Clien
 timeout, no audit hook, and no instrumentation, and the compliance claim "every data access is
 evidenced" stops being true. `insights check` fails the build if you do.
 
+## Your database
+
+A web app can own a database. The generated `platform.toml` turns it on:
+
+```toml
+[database]
+enabled = true
+```
+
+The platform resolves `INSIGHTS_DB_URL` (one role and one database per app, never shared), builds
+the engine with the same timeouts, audit hook, and instrumentation a connection gets, and hands you
+a session ([ADR-0007](docs/adr/0007-persistence.md)):
+
+```python
+from typing import Annotated
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
+
+from insights_platform.db import Base, get_session
+
+
+class Record(Base):
+    __tablename__ = "records"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str]
+
+
+@router.post("/records", status_code=201)
+@require_team("reporting")
+async def create(
+    data: RecordIn, session: Annotated[AsyncSession, Depends(get_session)]
+) -> RecordOut:
+    record = Record(title=data.title)
+    session.add(record)
+    await session.flush()
+    return RecordOut.model_validate(record, from_attributes=True)
+```
+
+The session commits when your route returns and rolls back if it raises. Flush inside the route when
+you need a generated id or want a constraint error to surface as a 500, because the commit happens
+after the response is sent. Every flush writes a `data.write` audit record with the table name and
+row count — never a value — and every statement still writes `data.query` with its hash.
+
+Schema changes are Alembic migrations under `migrations/`, driven by the CLI so no app carries an
+`alembic.ini` or imports Alembic (`no-raw-alembic`):
+
+```sh
+uv run --env-file .env insights db upgrade --app apps/reporting-dash
+uv run --env-file .env insights db current --app apps/reporting-dash
+uv run --env-file .env insights db revision --autogenerate -m "add owner" --app apps/reporting-dash
+```
+
+Two schema paths exist on purpose. On the SQLite fixture (`.env.example`, your tests) the SDK creates
+the schema from your models at startup, so `uv run pytest` needs no migration step. A Postgres
+database is only ever changed by `insights db upgrade`; the compose `postgres` profile creates the
+role and database for each app in `compose/postgres/20-owned-databases.sh`.
+
+## Caching
+
+One seam, constructed by the platform, namespaced per app, audited and instrumented:
+
+```python
+from insights_platform.cache import cached, get_cache
+
+cache = get_cache()
+await cache.set("headcount:2026-09", rows, ttl=300)
+rows = await cache.get("headcount:2026-09")  # None on a miss
+
+
+@cached(ttl=300)
+async def list_headcount() -> list[dict[str, int | str]]: ...
+```
+
+Values are JSON only; a row object or a datetime raises `CacheValueError` at `set`, so nothing is
+pickled by accident. `ttl` is required. By default the cache is in-process memory; set
+`INSIGHTS_CACHE_URL` to a Redis URL (`docker compose --profile cache up -d redis`) and the same code
+shares a cache across processes, with every key stored as `<app>:<key>` so a second app cannot read
+yours ([ADR-0004](docs/adr/0004-tenant-isolation.md)). `@cached` keys are hashes of the arguments,
+never the arguments themselves. Writes and deletes are audited by key hash; reads are counted in the
+`insights.cache.hits{result}` metric. Do not import `redis` yourself — `no-raw-drivers` fails the
+build if you do.
+
 ## The frontend
 
 A web app is generated with `frontend/`: Vite, React, TypeScript, ESLint, Prettier, Vitest. It is a
@@ -255,7 +344,9 @@ same PR, everything runs for every app. `CODEOWNERS` makes your team the owner o
 
 To run in a container, add a service to `docker-compose.yml` shaped like the two existing ones
 (build context is the repository root, `dockerfile` is your app's), then `docker compose up`. Web
-apps expose port 8000; jobs run once with `docker compose run --rm <service>`. Deployment beyond
+apps expose port 8000; jobs run once with `docker compose run --rm <service>`. Add
+`--profile postgres -f docker-compose.yml -f compose/postgres.yml` to run against Postgres, after
+adding your app's role and database to `compose/postgres/20-owned-databases.sh`. Deployment beyond
 compose is not built: `NEXT.md` records `insights deploy` and real Kubernetes manifests as deliberate
 omissions, each with the trigger that would justify them.
 
@@ -263,7 +354,8 @@ omissions, each with the trigger that would justify them.
 
 Web apps get two routes with no auth required. `/healthz` returns 200 whenever the process is up.
 `/readyz` pings every declared connection — `SELECT 1` on a database, `HEAD /` on an HTTP source,
-each within the 10-second timeout — and returns 200, or 503 with
+each within the 10-second timeout, plus `SELECT 1` on your owned database — and returns 200, or 503
+with
 `{"status": "unavailable", "error": "<ExceptionClass>"}` when one fails. A connection whose
 credential is missing fails there too. Each probe is audited like any other access. Compose uses
 `/readyz` as the health check.
@@ -311,7 +403,7 @@ can migrate generated files; nothing reads it yet.
 
 | Rule                     | What                                                              | Why                                                       | ADR  |
 |--------------------------|-------------------------------------------------------------------|-----------------------------------------------------------|------|
-| `no-raw-drivers`         | No `psycopg`, `asyncpg`, `aiosqlite`, `requests`, or `urllib.request` imports | The SDK hands you a configured client; raw drivers bypass it | 0003 |
+| `no-raw-drivers`         | No `psycopg`, `asyncpg`, `aiosqlite`, `requests`, `urllib.request`, `redis`, `aioredis`, or `memcache` imports | The SDK hands you a configured client; raw drivers bypass it | 0003 |
 | `no-client-construction` | No `httpx.AsyncClient`, `httpx.Client`, `httpx.get`, `create_engine`, `create_async_engine`, etc. | Construction is where credentials, timeouts, and audit attach | 0005 |
 | `use-create-app`         | No `FastAPI(...)` in app code                                     | `create_app()` installs auth and the boot check           | 0003 |
 | `no-private-imports`     | No `insights_platform` import with a `_`-prefixed segment         | Private modules are not part of the upgrade contract      | 0001 |
@@ -319,6 +411,7 @@ can migrate generated files; nothing reads it yet.
 | `manifest-valid`         | `platform.toml` has every key; name matches; connections are known | The manifest is what the platform reads first             | 0002 |
 | `scaffold-supported`     | `scaffold_version` is within two minor versions of the current    | Old scaffolds are migrated, not carried forever           | 0001 |
 | `sdk-pin-declared`       | `pyproject.toml` pins `insights-platform` to a range admitting the current release | `uv` drops the constraint for a workspace source, so a rule must enforce it | 0001 |
+| `no-raw-alembic`         | No `alembic` import in app code                                   | `insights db` owns the connection and the Alembic configuration | 0003 |
 
 ## Getting help
 

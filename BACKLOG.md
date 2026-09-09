@@ -37,11 +37,11 @@ Sequence table tracks what has landed since; the rows below are not updated.
 |---|------|------|-----------|------------|--------|
 | E0 | Scrub SQL text and URL query strings from traces | S | — | ADR-0005 must say traces are telemetry too and how they are scrubbed | Landed #19 |
 | EA | Async I/O throughout | M | — | **New ADR-0010 Async I/O**; ADR-0001 compat-surface note | Landed #20 |
-| E1 | Postgres for shared connections | S | EA | None (registry is dialect-neutral by design) | — |
-| E2 | Owned per-app database with migrations | L | EA, E1 | **New ADR-0007 Persistence**; ADR-0004 gains "per-tenant owned stores" | — |
-| E3 | Backend vertical-slice scaffold and layering rules | M | EA; E2 for a meaningful slice | ADR-0002 (template shape), ADR-0003 (new rules) | — |
+| E1 | Postgres for shared connections | S | EA | None (registry is dialect-neutral by design) | Landed #24 |
+| E2 | Owned per-app database with migrations | L | EA, E1 | **New ADR-0007 Persistence**; ADR-0004 gains "per-tenant owned stores" | Landed #24 |
+| E3 | Backend vertical-slice scaffold and layering rules | M | EA; E2 for a meaningful slice | ADR-0002 (template shape), ADR-0003 (new rules) | Phase A on `wt/slices` (rules, `features/headcount`, `/api/comp`); Phase B (`records` slice, frontend shape) pending |
 | E4 | Data classification drives enforcement | M | E3 | **New ADR-0008**; ADR-0005 update | — |
-| E5 | Caching layer: in-memory or Redis | M | EA; E4 (classification gates what may be cached) | ADR-0004 (shared Redis, per-tenant namespaces) | — |
+| E5 | Caching layer: in-memory or Redis | M | EA; E4 (classification gates what may be cached) | ADR-0004 (shared Redis, per-tenant namespaces) | Landed #26 (classification gating deferred to E4) |
 | E6 | Frontend scaffold for web apps | XL | E3 for the example page | **New ADR-0009 Frontend delivery** | Landed #21 (wave-1 spike) |
 | E7 | Break-glass, real | M | E4 | ADR-0005 evidence | — |
 | E8 | CLI growth | S each | varies | None | — |
@@ -364,7 +364,7 @@ verify `npm ci && npm run build`; if it is not, implement and mark verification 
 Merge order: E0, EA, then E6 (rebase; resolve the one-line `web.py` overlap). Then regenerate
 nothing — the example apps were converted by EA. Fresh-clone check.
 
-### Wave 2 — parallel: E1+E2, E5, E3 (E3 merges last)
+### Wave 2 — parallel: E1+E2, E5, E3 (E3 merges last) — E1+E2 #24 and E5 #26 landed 2026-09-09; E3 Phase A on `wt/slices`
 
 **E1+E2 `wt/database`** owns `data/registry.py`, additive `data/__init__.py`, new
 `sdk/src/insights_platform/db/**`, `cli/db.py` + registration in `cli/__init__.py`,
