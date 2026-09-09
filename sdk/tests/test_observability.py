@@ -92,15 +92,13 @@ def test_reserved_field_rejected() -> None:
         get_logger(TEST_LOGGER).info("bad", name="x")
 
 
-def test_caller_cannot_override_required_fields(captured: pytest.LogCaptureFixture) -> None:
-    get_logger(TEST_LOGGER).info("spoof", app="spoof", trace_id="deadbeef")
-    record = attrs(captured.records[0])
-    assert record["app"] is None
-    assert record["trace_id"] is None
+def test_caller_cannot_supply_required_fields() -> None:
+    with pytest.raises(ValueError, match="'app'"):
+        get_logger(TEST_LOGGER).info("spoof", app="spoof")
 
 
 def test_audit_marks_stream(captured: pytest.LogCaptureFixture) -> None:
-    audit.emit("authz.denied", principal="u1", route="/comp")
+    audit.emit("authz.denied", route="/comp")
     record = captured.records[0]
     assert record.name == "insights.audit"
     assert attrs(record)[audit.STREAM_FIELD] == audit.STREAM

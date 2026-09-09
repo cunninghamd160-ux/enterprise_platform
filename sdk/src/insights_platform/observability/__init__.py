@@ -50,8 +50,8 @@ class Logger:
 
     def _emit(self, level: int, event: str, fields: Mapping[str, Scalar]) -> None:
         for key, value in fields.items():
-            if key in _RESERVED_KEYS:
-                raise ValueError(f"log field {key!r} is reserved by the logging record")
+            if key in _RESERVED_KEYS or key in REQUIRED_FIELDS:
+                raise ValueError(f"log field {key!r} is reserved")
             if not isinstance(value, _SCALAR_TYPES):
                 raise TypeError(f"log field {key!r} must be a scalar, got {type(value).__name__}")
         self._log.log(level, event, extra={**fields, **_required_fields()})
