@@ -349,7 +349,10 @@ same PR, everything runs for every app. `CODEOWNERS` makes your team the owner o
 
 To run in a container, add a service to `docker-compose.yml` shaped like the two existing ones
 (build context is the repository root, `dockerfile` is your app's), then `docker compose up`. Web
-apps expose port 8000; jobs run once with `docker compose run --rm <service>`. Add
+apps expose port 8000; jobs run once with `docker compose run --rm <service>`. Nothing schedules
+a job yet: in production the runtime's scheduler (cron, a Kubernetes `CronJob`) runs the same
+container on the schedule your manifest will declare, and `run_job()`'s exit code and
+`job.completed` record are what it and your alerting consume; `NEXT.md` has the plan. Add
 `--profile postgres -f docker-compose.yml -f compose/postgres.yml` to run against Postgres, after
 adding your app's role and database to `compose/postgres/20-owned-databases.sh`. Deployment beyond
 compose is not built: `NEXT.md` records `insights deploy` and real Kubernetes manifests as deliberate
