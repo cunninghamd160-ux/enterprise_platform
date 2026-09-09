@@ -22,6 +22,18 @@ cleaned up at the end.
 
 ## Found during the build
 
+| Finding | Disposition |
+|---------|-------------|
+| Required log keys (`app`, `team`, `principal`, `request_id`, `trace_id`, `span_id`) are reserved; a caller passing one gets `ValueError`. Auth records the denied caller's team as `principal_team`; break-glass will need its own key for the operator (e.g. `grantee`) | Design note for ADR-0005/0006: say why silent override was rejected |
+| `opentelemetry.sdk._logs.LoggingHandler` is deprecated in OTel 1.44 in favour of `opentelemetry-instrumentation-logging` | One dependency plus one import swap in `observability/_otel.py`; three warnings today |
+| The OTel exporter adds `code.file.path` / `code.function.name` / `code.line.number` to every record | Harmless; a collector processor can drop them |
+| `SQLAlchemyInstrumentor` patches `sqlalchemy.create_engine` globally and rejects a second `instrument()` | Instrumented once in the registry; engines are built through the module attribute so every one is covered |
+| Starlette 1.6 deprecates `TestClient` over `httpx` in favour of `httpx2` | No dependency change yet; revisit when `httpx2` stabilises |
+| `insights check` does not track local-name shadowing (a parameter named `httpx`) | Accepted as accidental-not-adversarial per ADR-0003 |
+| No rule stops an app calling `logging.basicConfig` or reconfiguring the root logger | Candidate eighth rule the first time it bites |
+| The SSO stub treats a missing `X-Insights-Team` as `""`, so `require_team` simply denies | A real IdP mapping decides whether team is mandatory |
+| Request contextvars leaked between test modules until `sdk/tests/conftest.py` reset them | Fixed; the wave-2 app test fixtures should do the same |
+
 ## Tools
 
 The data-connection registry is the natural seam to expose connections as tools later; nothing in
