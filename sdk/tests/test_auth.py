@@ -5,7 +5,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from insights_platform import context
+from insights_platform import audit, context
 from insights_platform.auth import (
     Principal,
     UnprotectedRouteError,
@@ -18,6 +18,7 @@ from insights_platform.auth import (
 )
 from insights_platform.auth.authz import Policy
 from insights_platform.auth.sso import principal_from_headers
+from insights_platform.observability import REQUIRED_FIELDS, fields_of
 
 PA = {
     "X-Insights-User": "dana",
@@ -86,8 +87,16 @@ def audit_log(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
     return caplog
 
 
+def audit_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.name == "insights.audit"]
+
+
 def audit_events(caplog: pytest.LogCaptureFixture) -> list[tuple[str, dict[str, object]]]:
-    return [(r.getMessage(), r.fields) for r in caplog.records if r.name == "insights.audit"]
+    injected = {*REQUIRED_FIELDS, audit.STREAM_FIELD}
+    return [
+        (r.getMessage(), {k: v for k, v in fields_of(r).items() if k not in injected})
+        for r in audit_records(caplog)
+    ]
 
 
 def test_public_route_without_headers(client: TestClient) -> None:
@@ -108,12 +117,12 @@ def test_wrong_team_is_403_and_audited(
     [(event, fields)] = audit_events(audit_log)
     assert event == "authz.denied"
     assert fields == {
-        "principal": "sam",
-        "team": "finance",
+        "principal_team": "finance",
         "route": "/comp",
         "method": "GET",
         "required": "teams=people-analytics",
     }
+    assert fields_of(audit_records(audit_log)[0])["principal"] == "sam"
 
 
 def test_right_team_is_200(client: TestClient, audit_log: pytest.LogCaptureFixture) -> None:

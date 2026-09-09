@@ -63,8 +63,7 @@ def enforce(request: Request) -> None:
     if not (role_ok and team_ok):
         audit.emit(
             "authz.denied",
-            principal=principal.user,
-            team=principal.team,
+            principal_team=principal.team,
             route=route,
             method=method,
             required=policy.describe(),
