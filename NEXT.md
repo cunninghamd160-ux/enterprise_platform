@@ -78,6 +78,8 @@ cleaned up at the end.
 | `features-independent` checks the module named in the import statement, so `from ..b import service` passes: submodule versus re-export is undecidable statically | ADR-0003's "static catches accidental, not adversarial" applies |
 | `api-prefix` reads only literal paths and prefixes and `APIRouter(prefix=)` built in the same module; routes on objects it cannot trace to `create_app()` are ignored and non-literal prefixes are reported as unreadable | On `wt/slices`; same ADR-0003 placement argument |
 | E3 restructures `apps/people-analytics-comp` into a `comp` feature: `/comp` becomes `/api/comp` and `GET /` is dropped because the SPA contract owns `/`; the README curls change when it merges | On `wt/slices`, Phase A verified; Phase B (the owned-DB `records` slice and the frontend shape) pending |
+| The browser needs an SSO stub too: the template relies on the Vite dev proxy and `.env.local`, so the SPA served by the app itself gets 401s; `apps/people-analytics-dash` adds a sign-in page that stores user, team and roles for the session and sends them as the `X-Insights-*` headers | Demo-only today; lift it into `templates/web/frontend` when a second team wants a browser demo without the dev server. In production the SSO proxy sets the headers and neither stub exists (ADR-0004) |
+| Once an app with a `frontend/` is committed, `pre-commit run --all-files` needs `npm ci` in that app first: the eslint and prettier hooks fail with "run npm ci" when `node_modules` is missing | By design — pre-commit is a convenience, CI is the gate (ADR-0003) — but it now applies to every fresh checkout; ONBOARDING says so, and a hook that skips when `node_modules` is absent is the alternative if it bites |
 
 ## Tools
 
