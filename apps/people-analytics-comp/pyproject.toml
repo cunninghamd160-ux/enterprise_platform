@@ -3,7 +3,7 @@ name = "people-analytics-comp"
 version = "0.1.0"
 description = "Insights Hub web app owned by team people-analytics."
 requires-python = ">=3.12"
-dependencies = ["insights-platform"]
+dependencies = ["insights-platform>=0.1,<0.2"]
 
 [tool.uv.sources]
 insights-platform = { workspace = true }

@@ -5,7 +5,7 @@ tension it resolves and the trade-off it accepts.
 
 | ADR | Decision | Status |
 |-----|----------|--------|
-| [0001](0001-thin-sdk-monorepo.md) | Thin SDK in a `uv` workspace monorepo | Proposed |
+| [0001](0001-thin-sdk-monorepo.md) | Thin SDK, released and pinned, developed in a monorepo | Proposed |
 | [0002](0002-generate-dont-clone.md) | Generate, don't clone | Proposed |
 | [0003](0003-enforcement-placement.md) | Enforcement placement | Proposed |
 | [0004](0004-tenant-isolation.md) | Tenant isolation | Proposed |

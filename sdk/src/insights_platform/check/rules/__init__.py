@@ -6,6 +6,7 @@ from insights_platform.check.rules import (
     no_private_imports,
     no_raw_drivers,
     scaffold_supported,
+    sdk_pin_declared,
     use_create_app,
 )
 
@@ -17,4 +18,5 @@ RULES: tuple[Rule, ...] = (
     apps_independent.RULE,
     manifest_valid.RULE,
     scaffold_supported.RULE,
+    sdk_pin_declared.RULE,
 )

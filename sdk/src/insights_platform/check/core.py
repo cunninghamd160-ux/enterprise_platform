@@ -77,6 +77,7 @@ class AppContext:
     repo_root: Path
     known_connections: frozenset[str]
     current_scaffold_version: str
+    sdk_version: str
     manifest: dict[str, Any] | None
     manifest_error: str | None
     shared: dict[str, Any] = field(default_factory=dict)
@@ -91,6 +92,7 @@ class AppContext:
         *,
         known_connections: frozenset[str],
         current_scaffold_version: str,
+        sdk_version: str,
         shared: dict[str, Any],
     ) -> Self:
         manifest_path = app_dir / "platform.toml"
@@ -107,6 +109,7 @@ class AppContext:
             repo_root.resolve(),
             known_connections,
             current_scaffold_version,
+            sdk_version,
             manifest,
             manifest_error,
             shared,

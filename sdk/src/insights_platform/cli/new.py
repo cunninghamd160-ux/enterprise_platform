@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from packaging.version import Version
 
 from insights_platform import __version__
 from insights_platform.cli._repo import RepoRootNotFoundError, find_repo_root
@@ -22,6 +23,12 @@ class ScaffoldError(Exception):
     pass
 
 
+def sdk_pin(version: str) -> str:
+    """Range admitting the current SDK release and its patches, per ADR-0001."""
+    parsed = Version(version)
+    return f">={parsed.major}.{parsed.minor},<{parsed.major}.{parsed.minor + 1}"
+
+
 def scaffold(name: str, kind: Kind, team: str, dest: Path) -> Path:
     if not _NAME.match(name):
         raise ScaffoldError(f"{name!r} is not kebab-case (expected ^[a-z][a-z0-9-]*$)")
@@ -33,6 +40,7 @@ def scaffold(name: str, kind: Kind, team: str, dest: Path) -> Path:
         "__PKG__": name.replace("-", "_"),
         "__TEAM__": team,
         "__SCAFFOLD_VERSION__": __version__,
+        "__SDK_PIN__": sdk_pin(__version__),
     }
     source = _TEMPLATES / kind.value
     for path in sorted(source.rglob("*")):

@@ -68,7 +68,7 @@ fixtures expect; `docker-compose.yml` sets the same values.
 
 | Looking for                      | Go to                                                              |
 |----------------------------------|--------------------------------------------------------------------|
-| Why the platform is a library    | [ADR-0001 Thin SDK in a uv workspace monorepo](docs/adr/0001-thin-sdk-monorepo.md) |
+| Why the platform is a library    | [ADR-0001 Thin SDK, released and pinned](docs/adr/0001-thin-sdk-monorepo.md) |
 | Why apps are generated           | [ADR-0002 Generate, don't clone](docs/adr/0002-generate-dont-clone.md) |
 | Where each rule is enforced      | [ADR-0003 Enforcement placement](docs/adr/0003-enforcement-placement.md) |
 | What tenants share               | [ADR-0004 Tenant isolation](docs/adr/0004-tenant-isolation.md)     |
@@ -90,7 +90,8 @@ fixtures expect; `docker-compose.yml` sets the same values.
   a client ([ADR-0005](docs/adr/0005-operator-access.md)).
 - `insights check` runs seven rules, each citing the ADR it enforces: `no-raw-drivers`,
   `no-client-construction`, `use-create-app`, `no-private-imports`, `apps-independent`,
-  `manifest-valid`, `scaffold-supported`. The rules live inside the SDK and reach apps through three
+  `manifest-valid`, `scaffold-supported`, `sdk-pin-declared`. The rules live inside the SDK and reach
+  apps through three
   entry points: the pre-commit hook, the CLI, and the CI matrix
   ([ADR-0003](docs/adr/0003-enforcement-placement.md)).
 - `.github/CODEOWNERS` gives each team its own `apps/<name>/` and keeps `platform.toml`, `sdk/`,
@@ -98,12 +99,17 @@ fixtures expect; `docker-compose.yml` sets the same values.
 
 ## The upgrade story
 
-Apps depend on the SDK by workspace path, so every app is always on the SDK at `HEAD`. An SDK change
-is one pull request: `ci.yml` sees that `sdk/**` changed and runs `app-check.yml` for every app —
-lint, types, `insights check`, tests — while an app-only change runs only that app. `CODEOWNERS`
-requests each affected team's review on the same PR. If a change cannot land with every app in one
-PR, the SDK ships a deprecation shim first. `app-check.yml` is a `workflow_call` workflow, so a team
-that later leaves the monorepo can consume the same gate from its own repository
+The SDK ships as approved releases and each app pins the range it runs against, so a team chooses
+when to move within a window of the current release minus two. The monorepo is what makes that
+safe to publish: `ci.yml` sees that `sdk/**` changed and runs `app-check.yml` for every app —
+lint, types, `insights check`, tests — against the SDK at `HEAD` before a release is cut, while an
+app-only change runs only that app. A breaking change ships behind a deprecation shim in one
+release and loses it two releases later.
+
+`uv` ignores a declared version constraint when `[tool.uv.sources]` maps the dependency to a
+workspace member, so the pin is not self-enforcing in development; the `sdk-pin-declared` rule is
+what checks it. `app-check.yml` is a `workflow_call` workflow, so a team that later leaves the
+monorepo consumes the same gate from its own repository
 ([ADR-0001](docs/adr/0001-thin-sdk-monorepo.md)).
 
 ## Deliberate omissions

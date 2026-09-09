@@ -3,7 +3,7 @@ name = "finance-nightly-rollup"
 version = "0.1.0"
 description = "Insights Hub scheduled job owned by team finance."
 requires-python = ">=3.12"
-dependencies = ["insights-platform"]
+dependencies = ["insights-platform>=0.1,<0.2"]
 
 [tool.uv.sources]
 insights-platform = { workspace = true }
