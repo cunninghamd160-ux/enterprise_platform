@@ -1,0 +1,14 @@
+from fastapi import APIRouter
+
+from insights_platform.auth import require_team
+
+from . import service
+from .schemas import HeadcountRow
+
+router = APIRouter()
+
+
+@router.get("/headcount")
+@require_team("__TEAM__")
+async def headcount() -> list[HeadcountRow]:
+    return await service.list_headcount()

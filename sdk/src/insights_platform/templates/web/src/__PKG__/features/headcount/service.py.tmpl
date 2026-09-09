@@ -1,0 +1,7 @@
+from . import repository
+from .schemas import HeadcountRow
+
+
+async def list_headcount() -> list[HeadcountRow]:
+    rows = await repository.list_headcount()
+    return [HeadcountRow.model_validate(dict(row)) for row in rows]

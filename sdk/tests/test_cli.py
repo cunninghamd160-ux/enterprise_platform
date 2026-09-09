@@ -24,6 +24,14 @@ EXPECTED_FILES = (
     "src/{pkg}/main.py",
     "tests/test_main.py",
 )
+WEB_FILES = (
+    "src/{pkg}/features/__init__.py",
+    "src/{pkg}/features/headcount/__init__.py",
+    "src/{pkg}/features/headcount/repository.py",
+    "src/{pkg}/features/headcount/router.py",
+    "src/{pkg}/features/headcount/schemas.py",
+    "src/{pkg}/features/headcount/service.py",
+)
 FRONTEND_FILES = (
     "frontend/.env.local",
     "frontend/.prettierignore",
@@ -87,8 +95,10 @@ def files_under(root: Path) -> list[str]:
 def expected_files(kind: str, name: str | None = None, *, frontend: bool = True) -> list[str]:
     pkg = (name or f"demo-{kind}").replace("-", "_")
     files = [f.format(pkg=pkg) for f in EXPECTED_FILES]
-    if kind == "web" and frontend:
-        files.extend(FRONTEND_FILES)
+    if kind == "web":
+        files.extend(f.format(pkg=pkg) for f in WEB_FILES)
+        if frontend:
+            files.extend(FRONTEND_FILES)
     return sorted(files)
 
 
