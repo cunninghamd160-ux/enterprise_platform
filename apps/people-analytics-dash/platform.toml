@@ -1,0 +1,9 @@
+[app]
+name = "people-analytics-dash"
+team = "people-analytics"
+kind = "web"
+scaffold_version = "0.1.0"
+connections = ["warehouse"]
+
+[database]
+enabled = true

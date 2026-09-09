@@ -1,0 +1,29 @@
+import asyncio
+import importlib
+from pathlib import Path
+
+from alembic import context
+from sqlalchemy.engine import Connection
+
+from insights_platform import config, db
+
+config.load(config.locate(Path(__file__).resolve().parent))
+# Importing the app registers its models on db.Base.metadata, which autogenerate diffs against.
+importlib.import_module("people_analytics_dash.main")
+target_metadata = db.Base.metadata
+
+
+def run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    engine = db.get_engine()
+    async with engine.connect() as connection:
+        await connection.run_sync(run_migrations)
+    await engine.dispose()
+
+
+asyncio.run(run_async_migrations())

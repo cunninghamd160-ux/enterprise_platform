@@ -7,6 +7,7 @@ x-insights-env: &insights-env
   INSIGHTS_CONN_WAREHOUSE_URL: sqlite+aiosqlite:////data/warehouse.db
   INSIGHTS_CONN_HR_API_URL: http://hr-api.fixture
   INSIGHTS_CONN_HR_API_TOKEN: fixture-token
+  INSIGHTS_DB_URL: sqlite+aiosqlite:////data/owned.db
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
 services:
@@ -16,6 +17,23 @@ services:
       dockerfile: apps/people-analytics-comp/Dockerfile
     ports:
       - "8000:8000"
+    environment: *insights-env
+    volumes:
+      - warehouse:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # The demo web app: a generated slice app with the React frontend served at / and the SSO
+  # stub sign-in page. Open http://localhost:8080 once healthy.
+  people-analytics-dash:
+    build:
+      context: .
+      dockerfile: apps/people-analytics-dash/Dockerfile
+    ports:
+      - "8080:8000"
     environment: *insights-env
     volumes:
       - warehouse:/data

@@ -7,6 +7,7 @@
 *                               @insights-hub/platform
 
 /apps/people-analytics-comp/    @insights-hub/people-analytics
+/apps/people-analytics-dash/    @insights-hub/people-analytics
 /apps/finance-nightly-rollup/   @insights-hub/finance
 
 # The manifest is a platform contract even though it lives inside the app.
