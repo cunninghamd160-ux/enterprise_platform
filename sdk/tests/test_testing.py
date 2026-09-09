@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from insights_platform import config, data, web
+from insights_platform import config, data, db, web
 from insights_platform.auth import Principal, public
 from insights_platform.auth.sso import principal_from_headers
 from insights_platform.observability import fields_of
@@ -55,3 +55,14 @@ def test_fixture_env_provides_connections_without_dotenv(
     assert asyncio.run(count()) > 0
     assert engine.url.drivername == "sqlite+aiosqlite"
     assert Path(str(engine.url.database)).is_relative_to(tmp_path)
+
+
+def test_fixture_env_provides_an_owned_sqlite_database(
+    tmp_path: Path, write_manifest: ManifestWriter
+) -> None:
+    config.load(write_manifest(database=True))
+    db.validate()
+    engine = db.get_engine()
+    assert engine.url.drivername == "sqlite+aiosqlite"
+    assert Path(str(engine.url.database)).is_relative_to(tmp_path)
+    asyncio.run(db.ping())

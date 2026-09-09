@@ -1,33 +1,21 @@
 import asyncio
-import hashlib
 import os
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 import httpx
-import sqlalchemy.ext.asyncio
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from sqlalchemy import event, text
-from sqlalchemy.engine import make_url
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from insights_platform import audit, config
-from insights_platform.data import _fixtures
+from insights_platform.data import _engine, _fixtures
 from insights_platform.data.registry import KNOWN_CONNECTIONS, ConnectionSpec
 
 type Connection = AsyncEngine | httpx.AsyncClient
 
-_TIMEOUT_S = 10
-_CONNECT_TIMEOUT_ARG = {
-    "sqlite": "timeout",
-    "postgresql": "connect_timeout",
-    "mysql": "connect_timeout",
-    "mariadb": "connect_timeout",
-}
+_TIMEOUT_S = _engine.TIMEOUT_S
 
 _clients: dict[str, Connection] = {}
-_sqlalchemy_instrumentor = SQLAlchemyInstrumentor()
 
 
 class DataConnectionError(Exception):
@@ -145,22 +133,9 @@ def _build(spec: ConnectionSpec) -> Connection:
 
 
 def _build_engine(name: str, url: str) -> AsyncEngine:
-    parsed = make_url(url)
-    backend = parsed.get_backend_name()
-    connect_args: dict[str, Any] = {}
-    if (arg := _CONNECT_TIMEOUT_ARG.get(backend)) is not None:
-        connect_args[arg] = _TIMEOUT_S
-    # The instrumentor wraps create_engine and create_async_engine globally on first call and
-    # rejects a second call, so instrument once and resolve create_async_engine through the
-    # module at call time.
-    if not _sqlalchemy_instrumentor.is_instrumented_by_opentelemetry:
-        _sqlalchemy_instrumentor.instrument()
-    engine = sqlalchemy.ext.asyncio.create_async_engine(
-        url, pool_pre_ping=True, connect_args=connect_args
-    )
-    if backend == "sqlite" and parsed.database and parsed.database != ":memory:":
-        _fixtures.seed_sqlite(parsed.database, timeout=_TIMEOUT_S)
-    event.listen(engine.sync_engine, "before_cursor_execute", _audit_query(name))
+    engine = _engine.build_engine(name, url)
+    if (path := _engine.sqlite_file(engine.url)) is not None:
+        _fixtures.seed_sqlite(path, timeout=_TIMEOUT_S)
     return engine
 
 
@@ -175,24 +150,6 @@ def _build_http_client(name: str, url: str, token: str) -> httpx.AsyncClient:
     )
     HTTPXClientInstrumentor.instrument_client(client)
     return client
-
-
-def _audit_query(name: str) -> Callable[..., None]:
-    def listener(
-        _conn: Any,
-        _cursor: Any,
-        statement: str,
-        _parameters: Any,
-        _context: Any,
-        _executemany: bool,
-    ) -> None:
-        audit.emit(
-            "data.query",
-            connection=name,
-            statement_sha256=hashlib.sha256(statement.encode()).hexdigest(),
-        )
-
-    return listener
 
 
 def _audit_request(name: str) -> Callable[[httpx.Request], Awaitable[None]]:

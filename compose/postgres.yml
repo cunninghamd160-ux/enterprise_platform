@@ -1,0 +1,18 @@
+# Override that moves the shared warehouse and the owned databases onto the postgres profile:
+#   docker compose --profile postgres -f docker-compose.yml -f compose/postgres.yml up --build
+# Without this file every service stays on the SQLite fixture. Credentials are fixtures.
+services:
+  people-analytics-comp:
+    environment:
+      INSIGHTS_CONN_WAREHOUSE_URL: postgresql+psycopg://insights:insights@postgres:5432/warehouse  # pragma: allowlist secret
+      INSIGHTS_DB_URL: postgresql+psycopg://people_analytics_comp:people-analytics-comp@postgres:5432/people_analytics_comp  # pragma: allowlist secret
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  finance-nightly-rollup:
+    environment:
+      INSIGHTS_CONN_WAREHOUSE_URL: postgresql+psycopg://insights:insights@postgres:5432/warehouse  # pragma: allowlist secret
+    depends_on:
+      postgres:
+        condition: service_healthy

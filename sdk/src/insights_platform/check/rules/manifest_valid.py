@@ -1,4 +1,5 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 from insights_platform.check.core import AppContext, Rule, Violation
 
@@ -7,6 +8,9 @@ _ADR = "ADR-0002"
 _REQUIRED = ("name", "team", "kind", "scaffold_version", "connections")
 _STRING_KEYS = ("name", "team", "kind", "scaffold_version")
 _KINDS = frozenset({"web", "job"})
+_DATABASE_KEYS = frozenset({"enabled"})
+
+type Problem = Callable[[str], Violation]
 
 
 def _check(ctx: AppContext) -> Iterator[Violation]:
@@ -42,18 +46,38 @@ def _check(ctx: AppContext) -> Iterator[Violation]:
     if isinstance(name, str) and name != ctx.app_dir.name:
         yield problem(f"[app].name {name!r} does not match directory {ctx.app_dir.name!r}")
 
-    connections = app.get("connections")
+    yield from _check_connections(app.get("connections"), ctx.known_connections, problem)
+    yield from _check_database(ctx.manifest.get("database"), problem)
+
+
+def _check_connections(
+    connections: Any, known: frozenset[str], problem: Problem
+) -> Iterator[Violation]:
     if connections is None:
         return
     if not isinstance(connections, list) or not all(isinstance(c, str) for c in connections):
         yield problem("[app].connections must be a list of strings")
         return
-    known = ", ".join(sorted(ctx.known_connections))
+    registry = ", ".join(sorted(known))
     for connection in connections:
-        if connection not in ctx.known_connections:
+        if connection not in known:
             yield problem(
-                f"connection {connection!r} is not in the platform registry (known: {known})"
+                f"connection {connection!r} is not in the platform registry (known: {registry})"
             )
+
+
+def _check_database(database: Any, problem: Problem) -> Iterator[Violation]:
+    if database is None:
+        return
+    if not isinstance(database, dict):
+        yield problem("[database] must be a table")
+        return
+    if "enabled" not in database:
+        yield problem("[database].enabled is missing")
+    elif not isinstance(database["enabled"], bool):
+        yield problem("[database].enabled must be true or false")
+    for key in sorted(set(database) - _DATABASE_KEYS):
+        yield problem(f"[database].{key} is not a recognised key (known: enabled)")
 
 
 RULE = Rule(_NAME, _ADR, _check)

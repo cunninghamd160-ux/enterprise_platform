@@ -21,6 +21,7 @@ class AppConfig:
     kind: Kind
     scaffold_version: str
     connections: tuple[str, ...]
+    database: bool = False
 
 
 _current: AppConfig | None = None
@@ -47,6 +48,7 @@ def load(path: Path | None = None) -> AppConfig:
         kind=_kind(app, path),
         scaffold_version=_string(app, "scaffold_version", path),
         connections=_connections(app, path),
+        database=_database(raw, path),
     )
     _current = config
     context.app.set(config.name)
@@ -89,3 +91,15 @@ def _connections(app: dict[str, Any], path: Path) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
         raise ConfigError(f"{path}: [app].connections must be a list of non-empty strings")
     return tuple(value)
+
+
+def _database(raw: dict[str, Any], path: Path) -> bool:
+    table = raw.get("database")
+    if table is None:
+        return False
+    if not isinstance(table, dict):
+        raise ConfigError(f"{path}: [database] must be a table")
+    enabled = table.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"{path}: [database].enabled must be true or false")
+    return enabled

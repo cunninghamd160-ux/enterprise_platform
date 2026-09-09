@@ -30,12 +30,15 @@ def write_manifest(tmp_path: Path) -> ManifestWriter:
         name: str = "demo",
         kind: str = "web",
         connections: tuple[str, ...] = ("warehouse",),
+        database: bool = False,
     ) -> Path:
         directory = directory or tmp_path
         directory.mkdir(parents=True, exist_ok=True)
         body = MANIFEST.format(
             name=name, kind=kind, connections=", ".join(f'"{c}"' for c in connections)
         )
+        if database:
+            body += "\n[database]\nenabled = true\n"
         path = directory / "platform.toml"
         path.write_text(body, encoding="utf-8")
         return path

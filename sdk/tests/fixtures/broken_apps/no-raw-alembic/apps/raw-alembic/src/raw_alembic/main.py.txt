@@ -1,0 +1,9 @@
+from alembic import command, config
+
+from insights_platform.web import create_app
+
+app = create_app()
+
+
+def migrate() -> None:
+    command.upgrade(config.Config("alembic.ini"), "head")

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
-from insights_platform import config, data, web
+from insights_platform import config, data, db, web
 from insights_platform._internal import manifest
 from insights_platform.auth import UnprotectedRouteError, public, require_team
 from insights_platform.data import _fixtures
@@ -199,3 +199,27 @@ def test_locate_walks_upward_and_fails_cleanly(
     assert config.locate(tmp_path / "root" / "src" / "pkg") == expected
     with pytest.raises(config.ConfigError, match=r"no platform\.toml"):
         config.locate(tmp_path / "empty")
+
+
+def test_readiness_pings_the_owned_database(
+    write_manifest: ManifestWriter, caplog: pytest.LogCaptureFixture
+) -> None:
+    app = make_app(write_manifest, database=True)
+    with caplog.at_level(logging.INFO, logger="insights.audit"), client_for(app) as client:
+        assert client.get("/readyz").status_code == 200
+    queried = {fields_of(r)["connection"] for r in caplog.records if r.getMessage() == "data.query"}
+    assert queried == {"warehouse", "owned"}
+
+
+def test_missing_owned_database_url_is_not_ready(
+    write_manifest: ManifestWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("INSIGHTS_DB_URL")
+    app = make_app(write_manifest, database=True)
+
+    ready = TestClient(app).get("/readyz")
+    assert ready.status_code == 503
+    assert ready.json() == {"status": "unavailable", "error": "MissingDatabaseUrlError"}
+
+    with pytest.raises(db.MissingDatabaseUrlError), client_for(app):
+        pass

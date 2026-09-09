@@ -51,3 +51,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["sdk/tests"]
 addopts = "-ra --strict-markers --import-mode=importlib"
+markers = [
+    "integration: needs INSIGHTS_CONN_WAREHOUSE_URL and INSIGHTS_DB_URL pointing at Postgres; skipped otherwise",
+]

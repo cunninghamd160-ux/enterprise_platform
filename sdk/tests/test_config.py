@@ -77,3 +77,21 @@ def test_connections_must_be_list_of_strings(tmp_path: Path) -> None:
 def test_current_before_load() -> None:
     with pytest.raises(config.ConfigError, match="not loaded"):
         config.current()
+
+
+def test_database_defaults_to_disabled(tmp_path: Path) -> None:
+    assert config.load(write(tmp_path, VALID)).database is False
+
+
+def test_database_enabled(tmp_path: Path) -> None:
+    assert config.load(write(tmp_path, VALID + "\n[database]\nenabled = true\n")).database is True
+
+
+def test_database_must_be_a_table(tmp_path: Path) -> None:
+    with pytest.raises(config.ConfigError, match=r"\[database\] must be a table"):
+        config.load(write(tmp_path, "database = true\n" + VALID))
+
+
+def test_database_enabled_must_be_a_bool(tmp_path: Path) -> None:
+    with pytest.raises(config.ConfigError, match=r"\[database\]\.enabled must be true or false"):
+        config.load(write(tmp_path, VALID + '\n[database]\nenabled = "yes"\n'))

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from opentelemetry.trace import Status, StatusCode
 
-from insights_platform import config, context, data, observability
+from insights_platform import config, context, data, db, observability
 from insights_platform._internal import manifest as _manifest
 from insights_platform.observability import get_logger, get_meter, get_tracer
 
@@ -29,6 +29,7 @@ def run_job(fn: Callable[[], Awaitable[object]], *, manifest: Path | None = None
         with get_tracer("insights.job").start_as_current_span("job.run") as span:
             try:
                 data.validate_connections()
+                db.validate()
                 asyncio.run(_await(fn))
             except Exception as exc:
                 span.record_exception(exc)
