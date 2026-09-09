@@ -10,7 +10,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.metrics import Counter
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from insights_platform import auth, config, data, frontend, observability
+from insights_platform import auth, config, data, db, frontend, observability
 from insights_platform._internal import manifest as _manifest
 from insights_platform.observability import get_logger, get_meter
 
@@ -44,6 +44,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     auth.check_routes(app)
     frontend.mount_frontend(app)
     data.validate_connections()
+    db.validate()
     _log.info("app.started", routes=len([r for r in app.routes if isinstance(r, APIRoute)]))
     yield
     observability.flush()
@@ -60,6 +61,7 @@ def _add_health_routes(app: FastAPI) -> None:
     async def readyz() -> JSONResponse:
         try:
             await data.ping_connections()
+            await db.ping()
         except Exception as exc:
             return JSONResponse(
                 {"status": "unavailable", "error": type(exc).__name__}, status_code=503

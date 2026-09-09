@@ -72,6 +72,7 @@ def test_rules_are_in_table_order() -> None:
         "manifest-valid",
         "scaffold-supported",
         "sdk-pin-declared",
+        "no-raw-alembic",
     ]
 
 
@@ -86,6 +87,7 @@ def test_rules_are_in_table_order() -> None:
         ("manifest-valid", "ADR-0002", 4),
         ("scaffold-supported", "ADR-0001", 1),
         ("sdk-pin-declared", "ADR-0001", 1),
+        ("no-raw-alembic", "ADR-0003", 1),
     ],
 )
 def test_broken_fixture_fires_exactly_its_rule(
@@ -248,3 +250,63 @@ def test_pin_matching_ignores_name_normalisation(tmp_path: Path) -> None:
         'dependencies = ["Insights_Platform>=0.3,<0.4"]\n'
     )
     assert check(tmp_path) == []
+
+
+def with_database(app: Path, table: str) -> None:
+    manifest = app / "platform.toml"
+    manifest.write_text(manifest.read_text(encoding="utf-8") + table, encoding="utf-8")
+
+
+def test_manifest_accepts_an_enabled_database(tmp_path: Path) -> None:
+    with_database(make_app(tmp_path, "owned", ""), "\n[database]\nenabled = true\n")
+    assert check(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("table", "expected"),
+    [
+        ("\n[database]\n", ["[database].enabled is missing"]),
+        ('\n[database]\nenabled = "yes"\n', ["[database].enabled must be true or false"]),
+        (
+            "\n[database]\nenabled = true\nschema = 'x'\nurl = 'y'\n",
+            [
+                "[database].schema is not a recognised key (known: enabled)",
+                "[database].url is not a recognised key (known: enabled)",
+            ],
+        ),
+    ],
+)
+def test_manifest_database_table_is_validated(
+    tmp_path: Path, table: str, expected: list[str]
+) -> None:
+    with_database(make_app(tmp_path, "owned", ""), table)
+    violations = check(tmp_path)
+    assert [v.rule for v in violations] == ["manifest-valid"] * len(expected)
+    assert [v.message for v in violations] == expected
+
+
+def test_manifest_database_must_be_a_table(tmp_path: Path) -> None:
+    manifest = make_app(tmp_path, "owned", "") / "platform.toml"
+    manifest.write_text(
+        "database = true\n" + manifest.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (violation,) = check(tmp_path)
+    assert violation.message == "[database] must be a table"
+
+
+def test_alembic_rule_ignores_migrations_outside_src(tmp_path: Path) -> None:
+    app = make_app(tmp_path, "migrated", "from insights_platform.web import create_app\n")
+    (app / "migrations").mkdir()
+    (app / "migrations" / "env.py").write_text("from alembic import context\n")
+    assert check(tmp_path) == []
+
+
+def test_alembic_rule_catches_submodule_imports_once_per_line(tmp_path: Path) -> None:
+    make_app(
+        tmp_path,
+        "migrating",
+        "import alembic.command\nfrom alembic.config import Config\nimport alembic\n",
+    )
+    violations = check(tmp_path)
+    assert [(v.rule, v.line) for v in violations] == [("no-raw-alembic", n) for n in (1, 2, 3)]
+    assert all("insights db" in v.message for v in violations)

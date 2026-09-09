@@ -1,0 +1,9 @@
+[app]
+name = "raw-alembic"
+team = "people-analytics"
+kind = "web"
+scaffold_version = "0.3.0"
+connections = ["warehouse"]
+
+[database]
+enabled = true

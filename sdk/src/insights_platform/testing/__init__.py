@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from insights_platform import context, data, observability
+from insights_platform import context, data, db, observability
 from insights_platform.auth.sso import ROLES_HEADER, TEAM_HEADER, USER_HEADER
 
 __all__ = ["client_for", "headers_for", "insights_fixture_env"]
@@ -36,12 +36,15 @@ def insights_fixture_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ite
     )
     monkeypatch.setenv("INSIGHTS_CONN_HR_API_URL", "http://hr-api.fixture")
     monkeypatch.setenv("INSIGHTS_CONN_HR_API_TOKEN", "fixture-token")
+    monkeypatch.setenv(db.URL_ENV, f"sqlite+aiosqlite:///{(tmp_path / 'owned.db').as_posix()}")
     data.reset_clients()
+    db.reset()
     snapshot = [(var, var.get()) for var in _CONTEXT_VARS]
     try:
         yield
     finally:
         data.reset_clients()
+        db.reset()
         for var, value in snapshot:
             var.set(value)
 

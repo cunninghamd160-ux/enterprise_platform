@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -126,3 +127,33 @@ def test_runs_counter(write_manifest: ManifestWriter, monkeypatch: pytest.Monkey
         for point in metric.data.data_points
     }
     assert points == {"ok": 1, "failed": 1}
+
+
+def test_owned_database_is_validated_before_fn_runs(
+    write_manifest: ManifestWriter,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.delenv("INSIGHTS_DB_URL")
+    calls: list[str] = []
+
+    async def main() -> None:
+        calls.append("ran")
+
+    with caplog.at_level(logging.INFO, logger="insights.job"):
+        assert job.run_job(main, manifest=write_manifest(kind="job", database=True)) == 1
+
+    assert calls == []
+    assert completed(caplog)[1]["error"] == "MissingDatabaseUrlError"
+
+
+def test_owned_sqlite_database_exists_when_main_runs(write_manifest: ManifestWriter) -> None:
+    seen: list[bool] = []
+
+    async def main() -> None:
+        seen.append(
+            Path(os.environ["INSIGHTS_DB_URL"].removeprefix("sqlite+aiosqlite:///")).exists()
+        )
+
+    assert job.run_job(main, manifest=write_manifest(kind="job", database=True)) == 0
+    assert seen == [True]

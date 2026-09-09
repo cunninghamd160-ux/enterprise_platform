@@ -4,6 +4,7 @@ from insights_platform.check.rules import (
     manifest_valid,
     no_client_construction,
     no_private_imports,
+    no_raw_alembic,
     no_raw_drivers,
     scaffold_supported,
     sdk_pin_declared,
@@ -19,4 +20,5 @@ RULES: tuple[Rule, ...] = (
     manifest_valid.RULE,
     scaffold_supported.RULE,
     sdk_pin_declared.RULE,
+    no_raw_alembic.RULE,
 )

@@ -1,10 +1,13 @@
 import json
 import shutil
+import sqlite3
 import tomllib
+from contextlib import closing
 from importlib.metadata import entry_points
 from pathlib import Path
 
 import pytest
+from sqlalchemy.engine import make_url
 from typer.testing import CliRunner
 
 import insights_platform
@@ -23,6 +26,11 @@ EXPECTED_FILES = (
     "src/{pkg}/__init__.py",
     "src/{pkg}/main.py",
     "tests/test_main.py",
+)
+MIGRATION_FILES = (
+    "migrations/env.py",
+    "migrations/script.py.mako",
+    "migrations/versions/0001_records.py",
 )
 FRONTEND_FILES = (
     "frontend/.env.local",
@@ -87,6 +95,8 @@ def files_under(root: Path) -> list[str]:
 def expected_files(kind: str, name: str | None = None, *, frontend: bool = True) -> list[str]:
     pkg = (name or f"demo-{kind}").replace("-", "_")
     files = [f.format(pkg=pkg) for f in EXPECTED_FILES]
+    if kind == "web":
+        files.extend(MIGRATION_FILES)
     if kind == "web" and frontend:
         files.extend(FRONTEND_FILES)
     return sorted(files)
@@ -166,6 +176,7 @@ def test_new_writes_valid_manifest_and_pyproject(repo: Path, kind: str) -> None:
         "scaffold_version": insights_platform.__version__,
         "connections": ["warehouse"],
     }
+    assert manifest.get("database") == ({"enabled": True} if kind == "web" else None)
     pyproject = tomllib.loads((repo / target / "pyproject.toml").read_text(encoding="utf-8"))
     assert pyproject["project"]["name"] == f"demo-{kind}"
     assert pyproject["project"]["dependencies"] == [
@@ -273,3 +284,72 @@ def test_console_script_and_pytest_plugin_are_registered() -> None:
 )
 def test_sdk_pin_admits_the_release_and_its_patches(version: str, pin: str) -> None:
     assert sdk_pin(version) == pin
+
+
+def owned_tables(url: str) -> set[str]:
+    with closing(sqlite3.connect(str(make_url(url).database))) as conn:
+        rows = conn.execute("select name from sqlite_master where type = 'table'").fetchall()
+    return {row[0] for row in rows}
+
+
+def test_db_commands_migrate_the_generated_app(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    target, _ = generate("web", "demo-db", "--team", "people-analytics")
+    url = f"sqlite+aiosqlite:///{(repo / 'migrations.db').as_posix()}"
+    monkeypatch.setenv("INSIGHTS_DB_URL", url)
+
+    upgrade = runner.invoke(app, ["db", "upgrade", "--app", target.as_posix()])
+    assert upgrade.exit_code == 0, upgrade.output
+    assert {"alembic_version", "records"} <= owned_tables(url)
+
+    monkeypatch.chdir(repo / target / "src")
+    current = runner.invoke(app, ["db", "current"])
+    assert current.exit_code == 0, current.output
+    assert "0001" in current.output
+    monkeypatch.chdir(repo)
+
+    revision = runner.invoke(app, ["db", "revision", "-m", "add notes", "--app", target.as_posix()])
+    assert revision.exit_code == 0, revision.output
+    versions = sorted((repo / target / "migrations" / "versions").glob("*.py"))
+    assert [v.name for v in versions][:1] == ["0001_records.py"]
+    assert len(versions) == 2 and versions[1].name.endswith("_add_notes.py")
+    added = versions[1].read_text(encoding="utf-8")
+    assert 'down_revision: str | Sequence[str] | None = "0001"' in added
+    assert "import sqlalchemy" not in added
+
+    downgrade = runner.invoke(app, ["db", "downgrade", "base", "--app", target.as_posix()])
+    assert downgrade.exit_code == 0, downgrade.output
+    assert "records" not in owned_tables(url)
+
+
+def test_db_requires_an_enabled_database(repo: Path) -> None:
+    target, _ = generate("job", "nightly")
+    result = runner.invoke(app, ["db", "upgrade", "--app", target.as_posix()])
+    assert result.exit_code == 1
+    assert "[database] enabled = true" in result.output
+
+
+def test_db_requires_the_url(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    target, _ = generate("web", "web-app")
+    monkeypatch.delenv("INSIGHTS_DB_URL")
+    result = runner.invoke(app, ["db", "current", "--app", target.as_posix()])
+    assert result.exit_code == 1
+    assert "INSIGHTS_DB_URL" in result.output
+
+
+def test_db_without_a_manifest_fails_cleanly(repo: Path) -> None:
+    result = runner.invoke(app, ["db", "current"])
+    assert result.exit_code == 1
+    assert "no platform.toml" in result.output
+
+
+def test_db_reports_database_errors_in_one_line(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target, _ = generate("web", "unreachable-db")
+    monkeypatch.setenv(
+        "INSIGHTS_DB_URL", f"sqlite+aiosqlite:///{(repo / 'missing' / 'x.db').as_posix()}"
+    )
+    result = runner.invoke(app, ["db", "upgrade", "--app", target.as_posix()])
+    assert result.exit_code == 1
+    assert "error: OperationalError: unable to open database file" in result.output
+    assert "Traceback" not in result.output
