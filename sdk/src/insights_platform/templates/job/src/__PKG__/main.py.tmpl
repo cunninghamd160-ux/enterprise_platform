@@ -1,0 +1,19 @@
+import sys
+
+from sqlalchemy import text
+
+from insights_platform.data import get_engine
+from insights_platform.job import run_job
+from insights_platform.observability import get_logger
+
+log = get_logger("__PKG__")
+
+
+def main() -> None:
+    with get_engine("warehouse").connect() as conn:
+        rows = conn.execute(text("select team, sum(count) from headcount group by team")).all()
+    log.info("rollup.completed", rows=len(rows))
+
+
+if __name__ == "__main__":
+    sys.exit(run_job(main))

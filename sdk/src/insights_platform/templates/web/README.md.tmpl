@@ -1,0 +1,23 @@
+# __NAME__
+
+Insights Hub web app owned by team `__TEAM__`. `create_app()` supplies auth, data access,
+observability, health routes, and the boot-time route check; this app only adds routes.
+
+## Run
+
+    uv sync
+    uv run --env-file .env uvicorn __PKG__.main:app --reload
+
+Requests carry the SSO stub headers, for example `X-Insights-User: you` and
+`X-Insights-Team: __TEAM__`. `/healthz` and `/readyz` need none.
+
+## Verify
+
+    uv run pytest apps/__NAME__
+    uv run insights check apps/__NAME__
+
+## Container
+
+    docker build -f apps/__NAME__/Dockerfile -t __NAME__ .
+
+The build context is the repository root because the app depends on the SDK through the workspace.
