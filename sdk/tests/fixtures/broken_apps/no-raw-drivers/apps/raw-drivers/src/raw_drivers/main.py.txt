@@ -1,0 +1,9 @@
+import requests
+
+from insights_platform.web import create_app
+
+app = create_app()
+
+
+def fetch() -> int:
+    return requests.get("http://hr-api.fixture/employees", timeout=5).status_code

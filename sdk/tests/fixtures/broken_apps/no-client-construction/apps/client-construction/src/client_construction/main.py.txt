@@ -1,0 +1,6 @@
+import httpx as h
+
+from insights_platform.web import create_app
+
+app = create_app()
+client = h.Client(base_url="http://hr-api.fixture", timeout=5)

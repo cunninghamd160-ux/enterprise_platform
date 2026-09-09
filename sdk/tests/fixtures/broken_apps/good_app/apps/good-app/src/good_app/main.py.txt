@@ -1,0 +1,21 @@
+import httpx
+from sqlalchemy import Engine, text
+
+from insights_platform.data import get_connection
+from insights_platform.web import create_app
+
+app = create_app()
+
+
+def headcount() -> int:
+    engine = get_connection("warehouse")
+    assert isinstance(engine, Engine)
+    with engine.connect() as conn:
+        return int(conn.execute(text("select count(*) from headcount")).scalar_one())
+
+
+def hr_client() -> httpx.Client:
+    client = get_connection("hr-api")
+    if not isinstance(client, httpx.Client):
+        raise httpx.HTTPError("hr-api is not an HTTP connection")
+    return client

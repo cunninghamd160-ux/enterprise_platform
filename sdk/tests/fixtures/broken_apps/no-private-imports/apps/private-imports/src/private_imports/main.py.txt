@@ -1,0 +1,5 @@
+from insights_platform._internal import registry
+from insights_platform.web import create_app
+
+app = create_app()
+warehouse = registry.lookup("warehouse")

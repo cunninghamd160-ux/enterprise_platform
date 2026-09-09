@@ -1,0 +1,5 @@
+from insights_platform.job import run_job
+
+
+def main() -> None:
+    run_job("old-scaffold", lambda: None)
