@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -31,7 +32,7 @@ def test_client_for_runs_startup_checks(
 
     @app.get("/open")
     @public
-    def open_route() -> dict[str, str]:
+    async def open_route() -> dict[str, str]:
         return {"ok": "open"}
 
     with caplog.at_level(logging.INFO, logger="insights.web"), client_for(app) as client:
@@ -46,6 +47,11 @@ def test_fixture_env_provides_connections_without_dotenv(
 ) -> None:
     config.load(write_manifest())
     engine = data.get_engine("warehouse")
-    with engine.connect() as conn:
-        assert conn.execute(text("select count(*) from compensation")).scalar_one() > 0
+
+    async def count() -> int:
+        async with engine.connect() as conn:
+            return int((await conn.execute(text("select count(*) from compensation"))).scalar_one())
+
+    assert asyncio.run(count()) > 0
+    assert engine.url.drivername == "sqlite+aiosqlite"
     assert Path(str(engine.url.database)).is_relative_to(tmp_path)

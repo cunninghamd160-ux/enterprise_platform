@@ -9,9 +9,10 @@ from insights_platform.observability import get_logger
 log = get_logger("__PKG__")
 
 
-def main() -> None:
-    with get_engine("warehouse").connect() as conn:
-        rows = conn.execute(text("select team, sum(count) from headcount group by team")).all()
+async def main() -> None:
+    async with get_engine("warehouse").connect() as conn:
+        result = await conn.execute(text("select team, sum(count) from headcount group by team"))
+        rows = result.all()
     log.info("rollup.completed", rows=len(rows))
 
 

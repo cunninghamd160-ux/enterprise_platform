@@ -4,7 +4,7 @@ from insights_platform.check.core import AppContext, Rule, Violation
 
 _NAME = "no-raw-drivers"
 _ADR = "ADR-0003"
-_BANNED = ("psycopg", "psycopg2", "asyncpg", "requests", "urllib.request")
+_BANNED = ("psycopg", "psycopg2", "asyncpg", "aiosqlite", "requests", "urllib.request")
 
 
 def _check(ctx: AppContext) -> Iterator[Violation]:

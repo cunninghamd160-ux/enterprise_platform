@@ -3,6 +3,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from insights_platform import config, data, web
 from insights_platform._internal import manifest
 from insights_platform.auth import UnprotectedRouteError, public, require_team
+from insights_platform.data import _fixtures
 from insights_platform.observability import fields_of
 from insights_platform.testing import client_for, headers_for
 
@@ -21,17 +23,17 @@ PA = headers_for("dana", team="people-analytics", roles=["analyst"])
 FIN = headers_for("sam", team="finance")
 
 
-def make_app(write_manifest: ManifestWriter) -> FastAPI:
-    app = web.create_app(manifest=write_manifest(name="demo-web"))
+def make_app(write_manifest: ManifestWriter, **manifest_kwargs: object) -> FastAPI:
+    app = web.create_app(manifest=write_manifest(name="demo-web", **manifest_kwargs))
 
     @app.get("/open")
     @public
-    def open_route() -> dict[str, str]:
+    async def open_route() -> dict[str, str]:
         return {"ok": "open"}
 
     @app.get("/comp")
     @require_team("people-analytics")
-    def comp() -> dict[str, str]:
+    async def comp() -> dict[str, str]:
         return {"ok": "comp"}
 
     return app
@@ -55,7 +57,38 @@ def counter_points(reader: InMemoryMetricReader, name: str) -> list[tuple[dict[s
 def test_health_and_readiness(write_manifest: ManifestWriter) -> None:
     with client_for(make_app(write_manifest)) as client:
         assert client.get("/healthz").json() == {"status": "ok"}
+        assert client.get("/readyz").json() == {"status": "ok"}
+
+
+def test_readiness_pings_every_connection(
+    write_manifest: ManifestWriter, caplog: pytest.LogCaptureFixture
+) -> None:
+    app = make_app(write_manifest, connections=("warehouse", "hr-api"))
+    with caplog.at_level(logging.INFO, logger="insights.audit"), client_for(app) as client:
         assert client.get("/readyz").status_code == 200
+    events = {r.getMessage() for r in caplog.records}
+    assert {"data.query", "data.request"} <= events
+
+
+def test_unreachable_connection_is_not_ready(
+    write_manifest: ManifestWriter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unreachable(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("hr-api", request=request)
+
+    monkeypatch.setattr(_fixtures, "hr_api_handler", unreachable)
+    app = make_app(write_manifest, connections=("warehouse", "hr-api"))
+    with client_for(app) as client:
+        assert client.get("/healthz").status_code == 200
+        ready = client.get("/readyz")
+    assert ready.status_code == 503
+    assert ready.json() == {"status": "unavailable", "error": "ConnectTimeout"}
+
+
+def test_create_app_records_manifest_dir(write_manifest: ManifestWriter, tmp_path: Path) -> None:
+    app_dir = tmp_path / "apps" / "demo-web"
+    app = web.create_app(manifest=write_manifest(app_dir, name="demo-web"))
+    assert app.state.insights_manifest_dir == app_dir.resolve()
 
 
 def test_protected_route_enforced(write_manifest: ManifestWriter) -> None:
@@ -100,7 +133,7 @@ def test_unmarked_route_fails_startup(write_manifest: ManifestWriter) -> None:
     app = web.create_app(manifest=write_manifest())
 
     @app.get("/unmarked")
-    def unmarked() -> dict[str, str]:
+    async def unmarked() -> dict[str, str]:
         return {"ok": "never"}
 
     with pytest.raises(UnprotectedRouteError, match="GET /unmarked"), client_for(app):
@@ -145,6 +178,7 @@ def test_manifest_discovered_from_caller_not_cwd(
     spec.loader.exec_module(module)
 
     assert module.app.title == "demo-web"
+    assert module.app.state.insights_manifest_dir == app_dir.resolve()
     assert config.current().name == "demo-web"
 
 

@@ -18,7 +18,8 @@ _log = get_logger("insights.web")
 
 
 def create_app(*, manifest: Path | None = None) -> FastAPI:
-    cfg = config.load(_manifest.resolve(manifest, _manifest.caller_file()))
+    manifest_path = _manifest.resolve(manifest, _manifest.caller_file())
+    cfg = config.load(manifest_path)
     if cfg.kind != "web":
         raise config.ConfigError(
             f"{cfg.name} is a {cfg.kind} app; create_app() requires kind = 'web'"
@@ -29,6 +30,7 @@ def create_app(*, manifest: Path | None = None) -> FastAPI:
         "insights.http.requests", unit="1", description="HTTP requests by route, method, status"
     )
     app = FastAPI(title=cfg.name, lifespan=_lifespan)
+    app.state.insights_manifest_dir = manifest_path.resolve().parent
     # Added before auth so it sits inside the SSO middleware and sees the request's principal.
     app.add_middleware(_RequestMetrics, counter=requests)
     auth.install(app)
@@ -49,14 +51,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def _add_health_routes(app: FastAPI) -> None:
     @app.get("/healthz")
     @auth.public
-    def healthz() -> dict[str, str]:
+    async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/readyz")
     @auth.public
-    def readyz() -> JSONResponse:
+    async def readyz() -> JSONResponse:
         try:
-            data.validate_connections()
+            await data.ping_connections()
         except Exception as exc:
             return JSONResponse(
                 {"status": "unavailable", "error": type(exc).__name__}, status_code=503

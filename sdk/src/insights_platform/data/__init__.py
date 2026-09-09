@@ -1,20 +1,22 @@
+import asyncio
 import hashlib
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-import sqlalchemy
+import sqlalchemy.ext.asyncio
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from sqlalchemy import event
-from sqlalchemy.engine import Engine, make_url
+from sqlalchemy import event, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from insights_platform import audit, config
 from insights_platform.data import _fixtures
 from insights_platform.data.registry import KNOWN_CONNECTIONS, ConnectionSpec
 
-type Connection = Engine | httpx.Client
+type Connection = AsyncEngine | httpx.AsyncClient
 
 _TIMEOUT_S = 10
 _CONNECT_TIMEOUT_ARG = {
@@ -69,16 +71,16 @@ def get_connection(name: str) -> Connection:
     return _clients[name]
 
 
-def get_engine(name: str) -> Engine:
+def get_engine(name: str) -> AsyncEngine:
     connection = get_connection(name)
-    if not isinstance(connection, Engine):
+    if not isinstance(connection, AsyncEngine):
         raise WrongConnectionKindError(name, "sql")
     return connection
 
 
-def get_http_client(name: str) -> httpx.Client:
+def get_http_client(name: str) -> httpx.AsyncClient:
     connection = get_connection(name)
-    if not isinstance(connection, httpx.Client):
+    if not isinstance(connection, httpx.AsyncClient):
         raise WrongConnectionKindError(name, "http")
     return connection
 
@@ -88,13 +90,33 @@ def validate_connections() -> None:
         get_connection(name)
 
 
-def reset_clients() -> None:
-    for client in _clients.values():
-        if isinstance(client, Engine):
-            client.dispose()
+async def ping_connections() -> None:
+    for name in config.current().connections:
+        connection = get_connection(name)
+        if isinstance(connection, AsyncEngine):
+            async with connection.connect() as conn:
+                await conn.execute(text("select 1"))
         else:
-            client.close()
+            # Any status, 404 or 405 included, proves the host answers; only transport errors
+            # and timeouts propagate.
+            await connection.head("/")
+
+
+def reset_clients() -> None:
+    clients = list(_clients.values())
     _clients.clear()
+    if clients:
+        # aiosqlite closes through its own awaitable, so sync_engine.dispose() outside a
+        # greenlet leaks the connection; a short-lived loop is the sync-safe way to close.
+        asyncio.run(_close(clients))
+
+
+async def _close(clients: list[Connection]) -> None:
+    for client in clients:
+        if isinstance(client, AsyncEngine):
+            await client.dispose()
+        else:
+            await client.aclose()
 
 
 def _spec(name: str) -> ConnectionSpec:
@@ -122,25 +144,29 @@ def _build(spec: ConnectionSpec) -> Connection:
     return _build_http_client(spec.name, credentials["url"], credentials["token"])
 
 
-def _build_engine(name: str, url: str) -> Engine:
-    backend = make_url(url).get_backend_name()
+def _build_engine(name: str, url: str) -> AsyncEngine:
+    parsed = make_url(url)
+    backend = parsed.get_backend_name()
     connect_args: dict[str, Any] = {}
     if (arg := _CONNECT_TIMEOUT_ARG.get(backend)) is not None:
         connect_args[arg] = _TIMEOUT_S
-    # The instrumentor wraps sqlalchemy.create_engine globally on first call and rejects a second
-    # call, so instrument once and resolve create_engine through the module at call time.
+    # The instrumentor wraps create_engine and create_async_engine globally on first call and
+    # rejects a second call, so instrument once and resolve create_async_engine through the
+    # module at call time.
     if not _sqlalchemy_instrumentor.is_instrumented_by_opentelemetry:
         _sqlalchemy_instrumentor.instrument()
-    engine = sqlalchemy.create_engine(url, pool_pre_ping=True, connect_args=connect_args)
-    if backend == "sqlite":
-        _fixtures.seed_sqlite(engine)
-    event.listen(engine, "before_cursor_execute", _audit_query(name))
+    engine = sqlalchemy.ext.asyncio.create_async_engine(
+        url, pool_pre_ping=True, connect_args=connect_args
+    )
+    if backend == "sqlite" and parsed.database and parsed.database != ":memory:":
+        _fixtures.seed_sqlite(parsed.database, timeout=_TIMEOUT_S)
+    event.listen(engine.sync_engine, "before_cursor_execute", _audit_query(name))
     return engine
 
 
-def _build_http_client(name: str, url: str, token: str) -> httpx.Client:
+def _build_http_client(name: str, url: str, token: str) -> httpx.AsyncClient:
     is_fixture = httpx.URL(url).host.endswith(".fixture")
-    client = httpx.Client(
+    client = httpx.AsyncClient(
         base_url=url,
         headers={"Authorization": f"Bearer {token}"},
         timeout=httpx.Timeout(_TIMEOUT_S),
@@ -169,8 +195,8 @@ def _audit_query(name: str) -> Callable[..., None]:
     return listener
 
 
-def _audit_request(name: str) -> Callable[[httpx.Request], None]:
-    def hook(request: httpx.Request) -> None:
+def _audit_request(name: str) -> Callable[[httpx.Request], Awaitable[None]]:
+    async def hook(request: httpx.Request) -> None:
         audit.emit(
             "data.request",
             connection=name,

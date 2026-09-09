@@ -11,18 +11,18 @@ app = create_app()
 
 @app.get("/")
 @public
-def root() -> dict[str, str]:
+async def root() -> dict[str, str]:
     return {"app": "people-analytics-comp"}
 
 
 @app.get("/comp")
 @require_team("people-analytics")
-def compensation() -> list[dict[str, Any]]:
-    with get_engine("warehouse").connect() as conn:
-        rows = conn.execute(
+async def compensation() -> list[dict[str, Any]]:
+    async with get_engine("warehouse").connect() as conn:
+        result = await conn.execute(
             text(
                 "select employee_id, team, base_salary, currency "
                 "from compensation order by employee_id"
             )
         )
-        return [dict(row) for row in rows.mappings()]
+        return [dict(row) for row in result.mappings()]
