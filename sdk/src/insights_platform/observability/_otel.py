@@ -1,10 +1,14 @@
+import hashlib
 import logging
 import os
 import sys
 from dataclasses import dataclass
 from typing import IO, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from opentelemetry import _logs, metrics, trace
+from opentelemetry.attributes import BoundedAttributes
+from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -22,16 +26,22 @@ from opentelemetry.sdk.metrics.export import (
     PeriodicExportingMetricReader,
 )
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import (
     BatchSpanProcessor,
     ConsoleSpanExporter,
     SimpleSpanProcessor,
     SpanExporter,
 )
+from opentelemetry.util.types import AttributeValue
 
 OTLP_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT"
 ROOT_LOGGER = "insights"
+
+SQL_TEXT_KEYS = frozenset({"db.statement", "db.query.text"})
+URL_KEYS = frozenset({"http.url", "url.full", "http.target"})
+DROPPED_KEYS = frozenset({"url.query"})
+_SCRUBBED_KEYS = SQL_TEXT_KEYS | URL_KEYS | DROPPED_KEYS
 
 
 @dataclass(frozen=True)
@@ -57,6 +67,71 @@ class Handler(LoggingHandler):
     def _get_attributes(record: logging.LogRecord) -> dict[str, Any]:
         base = LoggingHandler._get_attributes(record) or {}
         return {key: value for key, value in base.items() if value is not None}
+
+
+class ScrubbingSpanProcessor(SpanProcessor):
+    # Span.end() freezes the attributes before any processor runs, so the span handed to the
+    # wrapped processor is rebuilt with scrubbed attributes rather than edited in place.
+    def __init__(self, inner: SpanProcessor) -> None:
+        self._inner = inner
+
+    def on_start(self, span: Span, parent_context: Context | None = None) -> None:
+        self._inner.on_start(span, parent_context)
+
+    def on_end(self, span: ReadableSpan) -> None:
+        self._inner.on_end(_scrub(span))
+
+    def shutdown(self) -> None:
+        self._inner.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return self._inner.force_flush(timeout_millis)
+
+
+def _scrub(span: ReadableSpan) -> ReadableSpan:
+    attributes = span.attributes or {}
+    if _SCRUBBED_KEYS.isdisjoint(attributes):
+        return span
+    rebuilt = BoundedAttributes(
+        attributes={
+            key: _scrub_value(key, value)
+            for key, value in attributes.items()
+            if key not in DROPPED_KEYS
+        }
+    )
+    rebuilt.dropped = span.dropped_attributes
+    return ReadableSpan(
+        name=span.name,
+        context=span.get_span_context(),
+        parent=span.parent,
+        resource=span.resource,
+        attributes=rebuilt,
+        events=span.events,
+        links=span.links,
+        kind=span.kind,
+        status=span.status,
+        start_time=span.start_time,
+        end_time=span.end_time,
+        instrumentation_scope=span.instrumentation_scope,
+    )
+
+
+def _scrub_value(key: str, value: AttributeValue) -> AttributeValue:
+    if not isinstance(value, str):
+        return value
+    if key in SQL_TEXT_KEYS:
+        return f"sha256:{hashlib.sha256(value.encode()).hexdigest()}"
+    if key in URL_KEYS:
+        return _without_query(value)
+    return value
+
+
+def _without_query(url: str) -> str:
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url.partition("?")[0].partition("#")[0]
+    return urlunsplit((parts.scheme, parts.netloc.rpartition("@")[2], parts.path, "", ""))
 
 
 def build(*, app: str, team: str, out: IO[str] = sys.stdout) -> Providers:
@@ -92,7 +167,7 @@ def build(*, app: str, team: str, out: IO[str] = sys.stdout) -> Providers:
         resource=resource, metric_readers=[PeriodicExportingMetricReader(metric_exporter)]
     )
     traces = TracerProvider(resource=resource)
-    traces.add_span_processor(span_processor)
+    traces.add_span_processor(ScrubbingSpanProcessor(span_processor))
 
     return Providers(
         resource=resource,
