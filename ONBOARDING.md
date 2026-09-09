@@ -181,8 +181,8 @@ Three steps:
 
 3. Call `get_engine("warehouse")` for a SQLAlchemy `AsyncEngine` or `get_http_client("hr-api")` for
    an `httpx.AsyncClient`. Both are the real library objects, and both are async — there is no sync
-   variant, because a sync engine under an async route blocks the event loop
-   ([ADR-0010](docs/adr/0010-async-io.md)):
+   variant, because a sync engine under an async route blocks the event loop and two APIs would
+   double the surface [ADR-0001](docs/adr/0001-thin-sdk-monorepo.md) keeps enumerable:
 
    ```python
    async with get_engine("warehouse").connect() as conn:
@@ -223,7 +223,8 @@ enabled = true
 
 The platform resolves `INSIGHTS_DB_URL` (one role and one database per app, never shared), builds
 the engine with the same timeouts, audit hook, and instrumentation a connection gets, and hands you
-a session ([ADR-0007](docs/adr/0007-persistence.md)):
+a session. An owned store is a per-tenant resource under the isolation line of
+[ADR-0004](docs/adr/0004-tenant-isolation.md):
 
 ```python
 from typing import Annotated
@@ -299,8 +300,8 @@ build if you do.
 ## The frontend
 
 A web app is generated with `frontend/`: Vite, React, TypeScript, ESLint, Prettier, Vitest. It is a
-single-page app served by your own app at `/`, calling your API under `/api` on the same origin
-([ADR-0009](docs/adr/0009-frontend-delivery.md)). The generated page lists `/api/records` and ships
+single-page app served by your own app at `/`, calling your API under `/api` on the same origin,
+so there is no second service, image, or auth story. The generated page lists `/api/records` and ships
 with a component test.
 
 ```sh
@@ -372,8 +373,10 @@ Every log line carries six fields: `app`, `team`, `principal`, `request_id`, `tr
 `span_id`. The last two let a log line be found from its trace and a trace from its log line, so when
 a trace backend exists the correlation is already there. By default everything goes to stdout as
 JSON. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to a collector and logs, metrics, and traces ship over
-OTLP/HTTP instead; nothing in your app changes. A Grafana / Tempo / Loki stack is not included yet;
-`NEXT.md` names its trigger.
+OTLP/HTTP instead; nothing in your app changes. Metrics are OpenTelemetry counters, so a Prometheus
+`/metrics` endpoint for scraping is the OTel Prometheus exporter behind the same seam — planned, no
+app change when it lands. A Grafana / Tempo / Loki stack is not included yet; `NEXT.md` names both
+triggers.
 
 Traces never carry your data. Before export — console or OTLP alike — `db.statement` is replaced by
 `sha256:<hex>`, the same hex the audit record's `statement_sha256` carries, so a trace and its audit
