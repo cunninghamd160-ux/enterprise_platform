@@ -107,6 +107,49 @@ does for an app that the app did not write.
    trace backend, real break-glass — each with the trigger that would justify building it, and the
    facts this build surfaced for the ADRs.
 
+## The CLI
+
+`insights` ships with the SDK and is the only tool a team needs beyond `uv`. Every command below was
+run against this repository today.
+
+```sh
+uv run insights new <name> --kind web|job [--team TEAM] [--dest DIR] [--no-frontend]
+uv run insights check [APP_DIR ...]
+uv run --env-file .env insights db upgrade|downgrade|current|revision [--app APP_DIR]
+```
+
+**`insights new`** ([ADR-0002](docs/adr/0002-generate-dont-clone.md)) copies the template out of the
+SDK package and substitutes the name, package, team, `scaffold_version` and the SDK release pin.
+`--kind web` gives the layered backend under `src/<pkg>/features/`, a `migrations/` directory and a
+Vite + React `frontend/`; `--no-frontend` gives the API-only variant with a single-stage Dockerfile;
+`--kind job` gives a flat `async def main()`. `--team` defaults to the name, `--dest` to `apps/`. The
+name must be kebab-case and the directory must not exist. Then:
+
+```sh
+uv sync                                          # the app joins the workspace
+uv run pytest apps/<name>                        # passes as generated
+uv run insights check apps/<name>                # passes every rule as generated
+npm ci --prefix apps/<name>/frontend && npm run dev --prefix apps/<name>/frontend   # web apps
+```
+
+**`insights check`** ([ADR-0003](docs/adr/0003-enforcement-placement.md)) runs the nine rules
+against every app under `apps/`, or only the directories given, and prints one line per violation:
+
+```
+violates ADR-0005: apps must not construct connection clients (httpx.Client); insights_platform.data.get_connection() attaches the credentials, timeouts, and audit hook every data access must carry (apps/x/src/x/main.py:6)
+```
+
+Exit code 1 on any violation, `N app(s) checked, no violations` otherwise. The pre-commit hook and
+the CI matrix run this same code, so a rule reaches every app the way any SDK change does.
+
+**`insights db`** ([ADR-0007](docs/adr/0007-persistence.md)) wraps Alembic for the app's owned
+database, so no app carries an `alembic.ini` or imports Alembic: `upgrade [REVISION]` (default
+`head`), `downgrade REVISION` (`-1`, `base`), `current`, and `revision -m TEXT [--autogenerate]`,
+which diffs the app's models against the database and writes a file under `migrations/versions/`.
+`--app` defaults to the app whose `platform.toml` is found upward from the current directory. It
+reads `INSIGHTS_DB_URL`, so run it with `--env-file .env`; on the SQLite fixture the schema is also
+created from the models at startup, on Postgres this command is the only path.
+
 ## Where things are
 
 ```
@@ -150,6 +193,7 @@ does for an app that the app did not write.
 | Why the page ships with its app  | [ADR-0009 Frontend delivery](docs/adr/0009-frontend-delivery.md) (draft) |
 | Why the data seam is async only  | [ADR-0010 Async I/O](docs/adr/0010-async-io.md) (draft)          |
 | Day one for a new team           | [ONBOARDING.md](ONBOARDING.md)                                     |
+| Every `insights` command         | [The CLI](#the-cli)                                                |
 | What was left out, and why       | [NEXT.md](NEXT.md)                                                 |
 | The original brief               | [docs/BRIEF.md](docs/BRIEF.md)                                     |
 
