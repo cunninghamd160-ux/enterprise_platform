@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from insights_platform import config, context, data
+from insights_platform.observability import fields_of
 
 MANIFEST = """
 [app]
@@ -112,12 +113,12 @@ def test_query_emits_audit_without_statement_text(
         conn.execute(text(statement)).all()
     records = [r for r in caplog.records if r.getMessage() == "data.query"]
     assert len(records) == 1
-    fields = records[0].fields
+    fields = fields_of(records[0])
     assert fields["connection"] == "warehouse"
     assert fields["principal"] == "u1"
     assert fields["request_id"] == "r1"
     assert fields["statement_sha256"] == hashlib.sha256(statement.encode()).hexdigest()
-    assert "people-analytics" not in str(fields)
+    assert statement not in str(fields)
 
 
 def test_hr_api_fixture_serves_json(tmp_path: Path) -> None:
@@ -139,7 +140,7 @@ def test_http_request_emits_audit_without_query_string(
         client.get("/employees", params={"ssn": "000-00-0000"})
     records = [r for r in caplog.records if r.getMessage() == "data.request"]
     assert len(records) == 1
-    fields = records[0].fields
+    fields = fields_of(records[0])
     assert fields["connection"] == "hr-api"
     assert fields["method"] == "GET"
     assert fields["target"] == "hr-api.fixture/employees"

@@ -10,7 +10,7 @@ from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from sqlalchemy import event
 from sqlalchemy.engine import Engine, make_url
 
-from insights_platform import audit, config, context
+from insights_platform import audit, config
 from insights_platform.data import _fixtures
 from insights_platform.data.registry import KNOWN_CONNECTIONS, ConnectionSpec
 
@@ -154,8 +154,6 @@ def _audit_query(name: str) -> Callable[..., None]:
         audit.emit(
             "data.query",
             connection=name,
-            principal=context.principal.get(),
-            request_id=context.request_id.get(),
             statement_sha256=hashlib.sha256(statement.encode()).hexdigest(),
         )
 
@@ -169,8 +167,6 @@ def _audit_request(name: str) -> Callable[[httpx.Request], None]:
             connection=name,
             method=request.method,
             target=f"{request.url.host}{request.url.path}",
-            principal=context.principal.get(),
-            request_id=context.request_id.get(),
         )
 
     return hook
