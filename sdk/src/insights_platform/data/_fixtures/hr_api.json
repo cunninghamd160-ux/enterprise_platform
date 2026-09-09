@@ -1,0 +1,6 @@
+[
+  {"id": "E001", "name": "Ada Fixture", "team": "people-analytics", "manager_id": null},
+  {"id": "E002", "name": "Grace Fixture", "team": "people-analytics", "manager_id": "E001"},
+  {"id": "E003", "name": "Linus Fixture", "team": "finance", "manager_id": null},
+  {"id": "E004", "name": "Ken Fixture", "team": "finance", "manager_id": "E003"}
+]

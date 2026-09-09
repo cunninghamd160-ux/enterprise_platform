@@ -44,6 +44,10 @@ python_version = "3.12"
 strict = true
 files = ["sdk/src"]
 
+[[tool.mypy.overrides]]
+module = "opentelemetry.instrumentation.sqlalchemy"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["sdk/tests"]
 addopts = "-ra --strict-markers"
