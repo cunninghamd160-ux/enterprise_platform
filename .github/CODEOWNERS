@@ -1,0 +1,13 @@
+# Ownership follows the isolation model (ADR-0004): an app team owns its own app directory and
+# nothing else; any change touching the platform pulls in the platform team. Later rules win.
+#
+# Team handles are placeholders until this lives in a GitHub org. GitHub skips lines whose owners
+# cannot be resolved, so this file documents intent today and enforces it on org import.
+
+*                               @insights-hub/platform
+
+/apps/people-analytics-comp/    @insights-hub/people-analytics
+/apps/finance-nightly-rollup/   @insights-hub/finance
+
+# The manifest is a platform contract even though it lives inside the app.
+/apps/*/platform.toml           @insights-hub/platform

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest
+
+  ci-ok:
+    needs: [sdk]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed
+        run: |
+          results='${{ toJSON(needs.*.result) }}'
+          echo "$results"
+          echo "$results" | grep -Eq 'failure|cancelled' && exit 1 || exit 0

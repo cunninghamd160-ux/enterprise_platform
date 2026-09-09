@@ -1,0 +1,25 @@
+[project]
+name = "insights-platform"
+version = "0.1.0"
+description = "Paved-road SDK for Insights Hub apps: auth, data connections, observability, enforcement."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "opentelemetry-api>=1.28",
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-httpx",
+    "opentelemetry-instrumentation-sqlalchemy",
+    "opentelemetry-sdk>=1.28",
+    "sqlalchemy>=2.0",
+    "typer>=0.12",
+    "uvicorn>=0.32",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insights_platform"]
