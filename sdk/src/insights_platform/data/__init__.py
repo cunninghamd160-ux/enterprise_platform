@@ -88,6 +88,15 @@ def validate_connections() -> None:
         get_connection(name)
 
 
+def reset_clients() -> None:
+    for client in _clients.values():
+        if isinstance(client, Engine):
+            client.dispose()
+        else:
+            client.close()
+    _clients.clear()
+
+
 def _spec(name: str) -> ConnectionSpec:
     try:
         return KNOWN_CONNECTIONS[name]

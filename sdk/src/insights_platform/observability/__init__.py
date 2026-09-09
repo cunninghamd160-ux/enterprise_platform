@@ -7,7 +7,7 @@ from opentelemetry.metrics import Meter
 from opentelemetry.trace import Tracer
 
 from insights_platform import context
-from insights_platform.observability._otel import configure
+from insights_platform.observability._otel import configure, current
 
 __all__ = [
     "REQUIRED_FIELDS",
@@ -15,9 +15,11 @@ __all__ = [
     "Scalar",
     "configure",
     "fields_of",
+    "flush",
     "get_logger",
     "get_meter",
     "get_tracer",
+    "shutdown",
 ]
 
 type Scalar = str | int | float | bool | None
@@ -48,13 +50,15 @@ class Logger:
     def __init__(self, name: str) -> None:
         self._log = logging.getLogger(name)
 
-    def _emit(self, level: int, event: str, fields: Mapping[str, Scalar]) -> None:
+    def _emit(
+        self, level: int, event: str, fields: Mapping[str, Scalar], *, exc_info: bool = False
+    ) -> None:
         for key, value in fields.items():
             if key in _RESERVED_KEYS or key in REQUIRED_FIELDS:
                 raise ValueError(f"log field {key!r} is reserved")
             if not isinstance(value, _SCALAR_TYPES):
                 raise TypeError(f"log field {key!r} must be a scalar, got {type(value).__name__}")
-        self._log.log(level, event, extra={**fields, **_required_fields()})
+        self._log.log(level, event, exc_info=exc_info, extra={**fields, **_required_fields()})
 
     def info(self, event: str, **fields: Scalar) -> None:
         self._emit(logging.INFO, event, fields)
@@ -64,6 +68,9 @@ class Logger:
 
     def error(self, event: str, **fields: Scalar) -> None:
         self._emit(logging.ERROR, event, fields)
+
+    def exception(self, event: str, **fields: Scalar) -> None:
+        self._emit(logging.ERROR, event, fields, exc_info=True)
 
 
 def get_logger(name: str) -> Logger:
@@ -80,3 +87,17 @@ def get_meter(name: str) -> Meter:
 
 def get_tracer(name: str) -> Tracer:
     return trace.get_tracer(name)
+
+
+def flush() -> None:
+    providers = current()
+    if providers is not None:
+        providers.logs.force_flush()
+        providers.metrics.force_flush()
+        providers.traces.force_flush()
+
+
+def shutdown() -> None:
+    providers = current()
+    if providers is not None:
+        providers.shutdown()
