@@ -1,0 +1,31 @@
+# Reusable per-app gate. Consumed by ci.yml as a matrix over apps/*, and callable from any other
+# repo that depends on insights-platform (ADR-0001's exit ramp), which is why setup is inlined
+# rather than using ./.github/actions/setup — local actions resolve against the caller's checkout.
+name: App check
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: Path to the app directory, e.g. apps/people-analytics-comp
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ inputs.app }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check "${{ inputs.app }}"
+      - run: uv run ruff format --check "${{ inputs.app }}"
+      - run: uv run mypy "${{ inputs.app }}/src"
+      - run: uv run insights check "${{ inputs.app }}"
+      - run: uv run pytest "${{ inputs.app }}"

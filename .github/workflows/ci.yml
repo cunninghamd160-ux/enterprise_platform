@@ -14,7 +14,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      sdk: ${{ steps.scope.outputs.sdk }}
+      apps: ${{ steps.scope.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          list-files: json
+          filters: |
+            sdk:
+              - 'sdk/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/**'
+            apps:
+              - 'apps/**'
+      # An SDK change runs every app (ADR-0001: the upgrade story is the CI matrix). An app-only
+      # change runs just that app. Pushes to main and manual runs always run everything.
+      - id: scope
+        env:
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          SDK_CHANGED: ${{ steps.filter.outputs.sdk }}
+          APP_FILES: ${{ steps.filter.outputs.apps_files || '[]' }}
+        run: |
+          all_apps=$(find apps -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | jq -R . | jq -sc .)
+          if [ "$IS_PR" != "true" ] || [ "$SDK_CHANGED" = "true" ]; then
+            sdk=true
+            apps=$all_apps
+          else
+            sdk=false
+            apps=$(echo "$APP_FILES" | jq -c '[.[] | capture("^(?<d>apps/[^/]+)").d] | unique')
+          fi
+          echo "sdk=$sdk" >> "$GITHUB_OUTPUT"
+          echo "apps=${apps:-[]}" >> "$GITHUB_OUTPUT"
+          echo "sdk=$sdk apps=$apps"
+
   sdk:
+    needs: changes
+    if: needs.changes.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -22,15 +64,27 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - run: uv run pytest
+      - run: uv run pytest sdk
+
+  apps:
+    needs: changes
+    if: needs.changes.outputs.apps != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
+    uses: ./.github/workflows/app-check.yml
+    with:
+      app: ${{ matrix.app }}
 
   ci-ok:
-    needs: [sdk]
+    needs: [changes, sdk, apps]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: All required jobs passed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
         run: |
-          results='${{ toJSON(needs.*.result) }}'
-          echo "$results"
-          echo "$results" | grep -Eq 'failure|cancelled' && exit 1 || exit 0
+          echo "$RESULTS"
+          echo "$RESULTS" | grep -Eq 'failure|cancelled' && exit 1 || exit 0
