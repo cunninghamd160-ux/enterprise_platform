@@ -1,0 +1,5 @@
+from beta.main import shared_helper
+from insights_platform.web import create_app
+
+app = create_app()
+label = shared_helper()

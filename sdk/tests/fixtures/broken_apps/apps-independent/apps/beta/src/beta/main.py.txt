@@ -1,0 +1,7 @@
+from insights_platform.web import create_app
+
+app = create_app()
+
+
+def shared_helper() -> str:
+    return "beta"

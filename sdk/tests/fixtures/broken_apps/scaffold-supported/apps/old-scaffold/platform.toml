@@ -1,0 +1,6 @@
+[app]
+name = "old-scaffold"
+team = "finance"
+kind = "job"
+scaffold_version = "0.0.9"
+connections = ["warehouse"]

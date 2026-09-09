@@ -1,0 +1,3 @@
+from insights_platform.web import create_app
+
+app = create_app()
