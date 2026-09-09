@@ -38,5 +38,15 @@ fact from the SDK release it runs against: that one is the pinned range in its `
 ([ADR-0001](0001-thin-sdk-monorepo.md)). An app can sit two scaffold versions behind and still be
 pinned to the current SDK, so the manifest records only the first.
 
+Generation is one-way, and the app's structure belongs to the team from that moment. No rule
+constrains layout — the checks read imports, calls and declarations, never the file tree — which is
+the same line ADR-0001 draws against frameworks. `scaffold_version` is therefore provenance, not a
+description of the app as it stands: a team that restructures makes the two diverge and nothing
+detects it. That is intended. Drift from the template is something review may raise, not something
+`insights check` decides; `scaffold-supported` gates how far behind an app is, never its shape.
+
 The CLI is one more thing to maintain. Token substitution cannot express conditional structure; if
-the `web` and `job` templates ever need more than a name, this decision gets revisited.
+the `web` and `job` templates ever need more than a name, this decision gets revisited. That has
+happened once already: `--no-frontend` is a boolean, absorbed by `_select()` dropping `frontend/**`
+and preferring `<file>.no-frontend.tmpl` variants — a naming convention rather than a template
+engine. The decision holds; a second conditional would reopen it.
