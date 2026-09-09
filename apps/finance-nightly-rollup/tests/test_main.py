@@ -1,0 +1,7 @@
+from finance_nightly_rollup.main import main
+
+from insights_platform.job import run_job
+
+
+def test_job_completes() -> None:
+    assert run_job(main) == 0

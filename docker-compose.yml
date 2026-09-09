@@ -1,0 +1,39 @@
+# Local deployment story. Values below are the fixtures the SDK ships with; nothing here is real.
+# The observability stack (OTel collector, Grafana, Tempo, Loki) is a deliberate omission — see
+# NEXT.md. The seam is already OTLP: point OTEL_EXPORTER_OTLP_ENDPOINT at a collector and no app or
+# SDK code changes.
+
+x-insights-env: &insights-env
+  INSIGHTS_CONN_WAREHOUSE_URL: sqlite:////data/warehouse.db
+  INSIGHTS_CONN_HR_API_URL: http://hr-api.fixture
+  INSIGHTS_CONN_HR_API_TOKEN: fixture-token
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
+services:
+  people-analytics-comp:
+    build:
+      context: .
+      dockerfile: apps/people-analytics-comp/Dockerfile
+    ports:
+      - "8000:8000"
+    environment: *insights-env
+    volumes:
+      - warehouse:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Run once: docker compose run --rm finance-nightly-rollup
+  finance-nightly-rollup:
+    build:
+      context: .
+      dockerfile: apps/finance-nightly-rollup/Dockerfile
+    profiles: ["jobs"]
+    environment: *insights-env
+    volumes:
+      - warehouse:/data
+
+volumes:
+  warehouse: {}
