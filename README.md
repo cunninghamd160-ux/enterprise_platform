@@ -142,7 +142,8 @@ violates ADR-0005: apps must not construct connection clients (httpx.Client); in
 Exit code 1 on any violation, `N app(s) checked, no violations` otherwise. The pre-commit hook and
 the CI matrix run this same code, so a rule reaches every app the way any SDK change does.
 
-**`insights db`** ([ADR-0007](docs/adr/0007-persistence.md)) wraps Alembic for the app's owned
+**`insights db`** ([ADR-0004](docs/adr/0004-tenant-isolation.md): an owned store is a per-tenant
+resource) wraps Alembic for the app's owned
 database, so no app carries an `alembic.ini` or imports Alembic: `upgrade [REVISION]` (default
 `head`), `downgrade REVISION` (`-1`, `base`), `current`, and `revision -m TEXT [--autogenerate]`,
 which diffs the app's models against the database and writes a file under `migrations/versions/`.
@@ -189,9 +190,6 @@ created from the models at startup, on Postgres this command is the only path.
 | What tenants share               | [ADR-0004 Tenant isolation](docs/adr/0004-tenant-isolation.md)     |
 | What the platform team can see   | [ADR-0005 Operator access](docs/adr/0005-operator-access.md)       |
 | How telemetry leaves an app      | [ADR-0006 Observability: OpenTelemetry as the wire contract](docs/adr/0006-observability-otel.md) |
-| Why apps get an owned database   | [ADR-0007 Persistence](docs/adr/0007-persistence.md) (draft)     |
-| Why the page ships with its app  | [ADR-0009 Frontend delivery](docs/adr/0009-frontend-delivery.md) (draft) |
-| Why the data seam is async only  | [ADR-0010 Async I/O](docs/adr/0010-async-io.md) (draft)          |
 | Day one for a new team           | [ONBOARDING.md](ONBOARDING.md)                                     |
 | Every `insights` command         | [The CLI](#the-cli)                                                |
 | What was left out, and why       | [NEXT.md](NEXT.md)                                                 |
@@ -203,20 +201,21 @@ created from the models at startup, on Postgres this command is the only path.
   install auth before any route exists, add `/healthz` and `/readyz`, and at startup refuse to run if
   any route lacks an authorization marker or any declared connection cannot be built
   ([ADR-0003](docs/adr/0003-enforcement-placement.md)). A web app's built `frontend/dist` is
-  mounted at `/` only after that check, so `/api/*` and the health routes keep precedence
-  ([ADR-0009](docs/adr/0009-frontend-delivery.md)).
+  mounted at `/` only after that check, so `/api/*` and the health routes keep precedence and an
+  unmarked route still refuses to boot ([ADR-0003](docs/adr/0003-enforcement-placement.md)).
 - `get_connection()` owns client construction. Credentials are resolved from the environment by
   connection name, timeouts are mandatory, every query and request is audited with the principal, and
   OpenTelemetry instrumentation is attached. An app cannot skip any of it because it never constructs
   a client ([ADR-0005](docs/adr/0005-operator-access.md)). The objects are async — a SQLAlchemy
   `AsyncEngine`, an `httpx.AsyncClient` — and `run_job()` runs an `async def main()`; there is no
-  sync variant ([ADR-0010](docs/adr/0010-async-io.md)).
+  sync variant, so the compatibility surface stays one API
+  ([ADR-0001](docs/adr/0001-thin-sdk-monorepo.md)).
 - `db.get_session()` and `cache.get_cache()` are built the same way: a URL by name from the
   environment (`INSIGHTS_DB_URL`, `INSIGHTS_CACHE_URL`), mandatory timeouts, an audit hook that
   records table names and row counts or key hashes but never values, and OpenTelemetry. Schema
   changes are Alembic migrations run through `insights db`; on the SQLite fixture the schema comes
-  from the models ([ADR-0007](docs/adr/0007-persistence.md),
-  [ADR-0004](docs/adr/0004-tenant-isolation.md)).
+  from the models. An owned store is a per-tenant resource under the same isolation line as the
+  connections ([ADR-0004](docs/adr/0004-tenant-isolation.md)).
 - Traces are scrubbed before export, whether to the console or over OTLP: `db.statement` becomes
   the same SHA-256 the audit stream records and URLs lose their query strings, so a trace backend
   sees no literal either ([ADR-0005](docs/adr/0005-operator-access.md)).
@@ -264,5 +263,5 @@ The five that matter most:
 The SDK, CLI, rules, frontend scaffold, the two example apps and the demo web app, CI matrix, and
 compose deployment are complete and tested. `BACKLOG.md` is the post-submission plan; wave 1 (trace scrubbing, async I/O,
 the frontend scaffold) and wave 2's database and cache have landed; the slice scaffold and its
-layering rules are on branch `wt/slices` pending their owned-database phase. ADRs 0001–0006, 0007,
-0009 and 0010 are drafts — each opens with a `DRAFT` marker — pending the author's rewrite.
+layering rules are on branch `wt/slices` pending their owned-database phase. The six ADRs are
+drafts — each opens with a `DRAFT` marker — pending the author's rewrite.

@@ -11,6 +11,7 @@ tension it resolves and the trade-off it accepts.
 | [0004](0004-tenant-isolation.md) | Tenant isolation | Proposed |
 | [0005](0005-operator-access.md) | Operator access | Proposed |
 | [0006](0006-observability-otel.md) | Observability: OpenTelemetry as the wire contract | Proposed |
-| [0007](0007-persistence.md) | Persistence: owned per-app Postgres databases behind SDK-constructed async engines | Proposed (draft) |
-| [0009](0009-frontend-delivery.md) | Frontend delivery: a co-located SPA under `/`, API under `/api` | Proposed (draft) |
-| [0010](0010-async-io.md) | Async I/O: one async data seam | Proposed (draft) |
+
+The set is kept to the six hardest calls. Three later decisions — the async-only data seam, owned
+per-app databases, and the co-located frontend — are consequences of ADR-0001 and ADR-0004 and are
+recorded in `BACKLOG.md` (EA, E2, E6) and `NEXT.md` rather than as ADRs of their own.
