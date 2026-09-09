@@ -2,8 +2,8 @@
 
 Platform work beyond the graded submission. `NEXT.md` is the submission's list of deliberate
 omissions and their triggers; this file is the build plan for the platform as a product. Each epic
-names the ADR it changes, because SCOPE rule 1 still holds: if a change alters an ADR's argument,
-the ADR moves first.
+names the ADR it changes, because the rule that governed the build still holds: if a change alters
+an ADR's argument, the ADR moves first.
 
 **Scope tension, stated once.** The brief scores prioritization and asks for deliberately trivial
 apps. Everything below except E0 is post-submission work. If the live session is the near-term goal,
@@ -407,4 +407,4 @@ additive `data/__init__.py`, tests.
 Coordinator, after each wave: verify every worktree independently (gates plus a live smoke of the
 feature itself), push, PR, merge with merge commits, rebase what remains, fresh-clone the README,
 update `ONBOARDING.md`/`README.md`/`NEXT.md`, and record every ADR-relevant fact in `NEXT.md`
-"Found during the build" for the author.
+"What the build taught the ADRs" for the author.
