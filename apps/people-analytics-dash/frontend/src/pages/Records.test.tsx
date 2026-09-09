@@ -1,0 +1,36 @@
+import { render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+
+import type { HeadcountRecord } from "../api/client";
+import { Records } from "./Records";
+
+const rows: HeadcountRecord[] = [
+  { team: "people-analytics", month: "2026-01", count: 12 },
+  { team: "people-analytics", month: "2026-02", count: 14 },
+];
+
+function stubFetch(response: Partial<Response>) {
+  const fetchMock = vi.fn().mockResolvedValue(response);
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+it("lists the records returned by /api/records", async () => {
+  const fetchMock = stubFetch({ ok: true, status: 200, json: () => Promise.resolve(rows) });
+  render(<Records />);
+  expect(screen.getByRole("status")).toHaveTextContent("Loading");
+  expect(await screen.findByRole("table")).toBeInTheDocument();
+  expect(screen.getAllByRole("row")).toHaveLength(rows.length + 1);
+  expect(screen.getByText("2026-02")).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith("/api/records", expect.anything());
+});
+
+it("shows the status when /api/records fails", async () => {
+  stubFetch({ ok: false, status: 403 });
+  render(<Records />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("403");
+});

@@ -11,6 +11,7 @@ members = [
     "finance-nightly-rollup",
     "insights-platform",
     "people-analytics-comp",
+    "people-analytics-dash",
 ]
 
 [manifest.dependency-groups]
@@ -1020,6 +1021,17 @@ wheels = [
 name = "people-analytics-comp"
 version = "0.1.0"
 source = { editable = "apps/people-analytics-comp" }
+dependencies = [
+    { name = "insights-platform" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "insights-platform", editable = "sdk" }]
+
+[[package]]
+name = "people-analytics-dash"
+version = "0.1.0"
+source = { editable = "apps/people-analytics-dash" }
 dependencies = [
     { name = "insights-platform" },
 ]
