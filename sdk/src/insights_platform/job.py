@@ -1,5 +1,6 @@
+import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,7 +13,7 @@ from insights_platform.observability import get_logger, get_meter, get_tracer
 _log = get_logger("insights.job")
 
 
-def run_job(fn: Callable[[], object], *, manifest: Path | None = None) -> int:
+def run_job(fn: Callable[[], Awaitable[object]], *, manifest: Path | None = None) -> int:
     cfg = config.load(_manifest.resolve(manifest, _manifest.caller_file()))
     if cfg.kind != "job":
         raise config.ConfigError(f"{cfg.name} is a {cfg.kind} app; run_job() requires kind = 'job'")
@@ -28,7 +29,7 @@ def run_job(fn: Callable[[], object], *, manifest: Path | None = None) -> int:
         with get_tracer("insights.job").start_as_current_span("job.run") as span:
             try:
                 data.validate_connections()
-                fn()
+                asyncio.run(_await(fn))
             except Exception as exc:
                 span.record_exception(exc)
                 span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
@@ -47,6 +48,10 @@ def run_job(fn: Callable[[], object], *, manifest: Path | None = None) -> int:
         context.principal.reset(principal_token)
         context.request_id.reset(request_token)
         observability.flush()
+
+
+async def _await(fn: Callable[[], Awaitable[object]]) -> object:
+    return await fn()
 
 
 def _elapsed_ms(started: float) -> float:

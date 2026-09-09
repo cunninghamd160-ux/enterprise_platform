@@ -1,32 +1,26 @@
 import json
 import sqlite3
+from contextlib import closing
 from functools import cache
 from pathlib import Path
-from typing import cast
 
 import httpx
-from sqlalchemy.engine import Engine
 
 _DIR = Path(__file__).parent
 _SEED_SQL = _DIR / "warehouse.sql"
 _HR_API = _DIR / "hr_api.json"
 
 
-def seed_sqlite(engine: Engine) -> None:
-    database = engine.url.database
-    if database and database != ":memory:":
-        Path(database).parent.mkdir(parents=True, exist_ok=True)
-    raw = engine.raw_connection()
-    try:
-        driver = cast(sqlite3.Connection, raw.driver_connection)
-        seeded = driver.execute(
+def seed_sqlite(database: str, *, timeout: float) -> None:
+    path = Path(database)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(path, timeout=timeout)) as conn:
+        seeded = conn.execute(
             "select 1 from sqlite_master where type = 'table' and name = 'compensation'"
         ).fetchone()
         if seeded is None:
-            driver.executescript(_SEED_SQL.read_text(encoding="utf-8"))
-            driver.commit()
-    finally:
-        raw.close()
+            conn.executescript(_SEED_SQL.read_text(encoding="utf-8"))
+            conn.commit()
 
 
 def hr_api_handler(request: httpx.Request) -> httpx.Response:

@@ -4,7 +4,7 @@
 # SDK code changes.
 
 x-insights-env: &insights-env
-  INSIGHTS_CONN_WAREHOUSE_URL: sqlite:////data/warehouse.db
+  INSIGHTS_CONN_WAREHOUSE_URL: sqlite+aiosqlite:////data/warehouse.db
   INSIGHTS_CONN_HR_API_URL: http://hr-api.fixture
   INSIGHTS_CONN_HR_API_TOKEN: fixture-token
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}

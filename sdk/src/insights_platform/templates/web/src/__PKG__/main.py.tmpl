@@ -9,15 +9,17 @@ from insights_platform.web import create_app
 app = create_app()
 
 
-@app.get("/")
+@app.get("/api")
 @public
-def root() -> dict[str, str]:
+async def root() -> dict[str, str]:
     return {"app": "__NAME__"}
 
 
-@app.get("/records")
+@app.get("/api/records")
 @require_team("__TEAM__")
-def records() -> list[dict[str, Any]]:
-    with get_engine("warehouse").connect() as conn:
-        rows = conn.execute(text("select team, month, count from headcount order by month, team"))
-        return [dict(row) for row in rows.mappings()]
+async def records() -> list[dict[str, Any]]:
+    async with get_engine("warehouse").connect() as conn:
+        result = await conn.execute(
+            text("select team, month, count from headcount order by month, team")
+        )
+        return [dict(row) for row in result.mappings()]

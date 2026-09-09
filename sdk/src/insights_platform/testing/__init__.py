@@ -31,7 +31,8 @@ def client_for(app: FastAPI) -> Iterator[TestClient]:
 @pytest.fixture(autouse=True)
 def insights_fixture_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv(
-        "INSIGHTS_CONN_WAREHOUSE_URL", f"sqlite:///{(tmp_path / 'warehouse.db').as_posix()}"
+        "INSIGHTS_CONN_WAREHOUSE_URL",
+        f"sqlite+aiosqlite:///{(tmp_path / 'warehouse.db').as_posix()}",
     )
     monkeypatch.setenv("INSIGHTS_CONN_HR_API_URL", "http://hr-api.fixture")
     monkeypatch.setenv("INSIGHTS_CONN_HR_API_TOKEN", "fixture-token")
