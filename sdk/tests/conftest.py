@@ -5,8 +5,6 @@ import pytest
 
 from insights_platform import config
 
-pytest_plugins = ["insights_platform.testing"]
-
 MANIFEST = """
 [app]
 name = "{name}"
