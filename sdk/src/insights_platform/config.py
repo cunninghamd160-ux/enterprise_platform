@@ -60,6 +60,14 @@ def current() -> AppConfig:
     return _current
 
 
+def locate(start: Path) -> Path:
+    for directory in (start, *start.parents):
+        candidate = directory / "platform.toml"
+        if candidate.is_file():
+            return candidate
+    raise ConfigError(f"no platform.toml found in {start} or any parent directory")
+
+
 def _string(app: dict[str, Any], key: str, path: Path) -> str:
     value = app[key]
     if not isinstance(value, str) or not value:
