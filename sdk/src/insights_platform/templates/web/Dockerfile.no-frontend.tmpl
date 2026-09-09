@@ -1,16 +1,8 @@
-FROM node:24-alpine AS frontend
-WORKDIR /fe
-COPY apps/__NAME__/frontend/package.json apps/__NAME__/frontend/package-lock.json ./
-RUN npm ci
-COPY apps/__NAME__/frontend/ ./
-RUN npm run build
-
 FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /workspace
 COPY . .
-COPY --from=frontend /fe/dist apps/__NAME__/frontend/dist
 RUN uv sync --frozen --no-dev --package __NAME__
 ENV PATH="/workspace/.venv/bin:$PATH"
 WORKDIR /workspace/apps/__NAME__

@@ -10,7 +10,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.metrics import Counter
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from insights_platform import auth, config, data, observability
+from insights_platform import auth, config, data, frontend, observability
 from insights_platform._internal import manifest as _manifest
 from insights_platform.observability import get_logger, get_meter
 
@@ -42,6 +42,7 @@ def create_app(*, manifest: Path | None = None) -> FastAPI:
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     auth.check_routes(app)
+    frontend.mount_frontend(app)
     data.validate_connections()
     _log.info("app.started", routes=len([r for r in app.routes if isinstance(r, APIRoute)]))
     yield

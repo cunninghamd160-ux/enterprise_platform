@@ -29,3 +29,32 @@ jobs:
       - run: uv run mypy "${{ inputs.app }}/src"
       - run: uv run insights check "${{ inputs.app }}"
       - run: uv run pytest "${{ inputs.app }}"
+      # A job-level `if:` cannot see the checkout, so one step detects the frontend and the rest
+      # key off its output. Apps generated with --no-frontend and jobs skip everything below.
+      - id: frontend
+        env:
+          APP: ${{ inputs.app }}
+        run: |
+          if [ -f "$APP/frontend/package.json" ]; then present=true; else present=false; fi
+          echo "present=$present" >> "$GITHUB_OUTPUT"
+      - if: steps.frontend.outputs.present == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ inputs.app }}/frontend/package-lock.json
+      - if: steps.frontend.outputs.present == 'true'
+        working-directory: ${{ inputs.app }}/frontend
+        run: npm ci
+      - if: steps.frontend.outputs.present == 'true'
+        working-directory: ${{ inputs.app }}/frontend
+        run: npm run lint
+      - if: steps.frontend.outputs.present == 'true'
+        working-directory: ${{ inputs.app }}/frontend
+        run: npx tsc --noEmit
+      - if: steps.frontend.outputs.present == 'true'
+        working-directory: ${{ inputs.app }}/frontend
+        run: npm run build
+      - if: steps.frontend.outputs.present == 'true'
+        working-directory: ${{ inputs.app }}/frontend
+        run: npx vitest run

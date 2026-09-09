@@ -219,3 +219,6 @@ __marimo__/
 
 # Local fixture state (sqlite warehouse, etc.)
 .local/
+
+# Frontend (apps/*/frontend)
+node_modules/

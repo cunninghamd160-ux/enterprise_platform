@@ -1,0 +1,27 @@
+import type { HeadcountRecord } from "../api/client";
+
+export function RecordsTable({ records }: { records: HeadcountRecord[] }) {
+  if (records.length === 0) {
+    return <p>No records.</p>;
+  }
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th>Team</th>
+          <th>Month</th>
+          <th>Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        {records.map((record) => (
+          <tr key={`${record.team}/${record.month}`}>
+            <td>{record.team}</td>
+            <td>{record.month}</td>
+            <td>{record.count}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}

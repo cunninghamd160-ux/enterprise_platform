@@ -1,0 +1,19 @@
+const API = "/api";
+
+export interface HeadcountRecord {
+  team: string;
+  month: string;
+  count: number;
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  const response = await fetch(`${API}${path}`, { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    throw new Error(`GET ${API}${path} failed with ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+export function fetchRecords(): Promise<HeadcountRecord[]> {
+  return getJson<HeadcountRecord[]>("/records");
+}
