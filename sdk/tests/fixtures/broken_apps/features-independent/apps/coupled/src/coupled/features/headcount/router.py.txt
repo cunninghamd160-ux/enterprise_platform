@@ -1,0 +1,15 @@
+from typing import Any
+
+from fastapi import APIRouter
+
+from insights_platform.auth import require_team
+
+from . import service
+
+router = APIRouter()
+
+
+@router.get("/headcount")
+@require_team("platform")
+async def headcount() -> list[dict[str, Any]]:
+    return await service.list_headcount()

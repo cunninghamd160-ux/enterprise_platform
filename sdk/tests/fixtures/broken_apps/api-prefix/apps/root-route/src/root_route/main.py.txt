@@ -1,0 +1,10 @@
+from insights_platform.auth import public
+from insights_platform.web import create_app
+
+app = create_app()
+
+
+@app.get("/")
+@public
+async def root() -> dict[str, str]:
+    return {"app": "root-route"}

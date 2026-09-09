@@ -1,0 +1,7 @@
+from typing import Any
+
+from . import repository
+
+
+async def list_headcount() -> list[dict[str, Any]]:
+    return [dict(row) for row in await repository.list_headcount()]

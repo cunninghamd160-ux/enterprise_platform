@@ -26,6 +26,7 @@ class Violation:
 class ImportTable:
     aliases: dict[str, str]
     imported: tuple[tuple[str, int], ...]
+    modules: tuple[tuple[str, int], ...] = ()
 
     def resolve(self, node: ast.expr) -> str | None:
         if isinstance(node, ast.Name):
@@ -46,29 +47,48 @@ def parse_module(path: Path) -> ast.Module | None:
         return None
 
 
-def import_table(tree: ast.Module) -> ImportTable:
+def import_table(tree: ast.Module, *, package: str | None = None) -> ImportTable:
     aliases: dict[str, str] = {}
     imported: list[tuple[str, int]] = []
+    modules: list[tuple[str, int]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imported.append((alias.name, node.lineno))
+                modules.append((alias.name, node.lineno))
                 if alias.asname:
                     aliases[alias.asname] = alias.name
                 else:
                     root = alias.name.split(".")[0]
                     aliases[root] = root
-        # Relative imports cannot leave the app's own package, so no rule can apply to them.
-        elif isinstance(node, ast.ImportFrom) and not node.level:
-            module = node.module or ""
+        elif isinstance(node, ast.ImportFrom):
+            module = _resolve_from(node, package)
+            if module is None:
+                continue
             imported.append((module, node.lineno))
+            modules.append((module, node.lineno))
             for alias in node.names:
                 if alias.name == "*":
                     continue
                 qualified = f"{module}.{alias.name}"
                 imported.append((qualified, node.lineno))
                 aliases[alias.asname or alias.name] = qualified
-    return ImportTable(aliases, tuple(imported))
+    return ImportTable(aliases, tuple(imported), tuple(modules))
+
+
+def _resolve_from(node: ast.ImportFrom, package: str | None) -> str | None:
+    if not node.level:
+        return node.module or ""
+    # Relative imports are resolved to absolute names so the slice rules can see the edges
+    # between an app's own modules. The absolute-prefix rules (httpx, requests, ...) never match a
+    # name rooted at the app's package, so their behaviour is unchanged.
+    if package is None:
+        return None
+    parts = package.split(".")
+    if node.level > len(parts):
+        return None
+    base = parts[: len(parts) - node.level + 1]
+    return ".".join([*base, node.module] if node.module else base)
 
 
 @dataclass
@@ -132,8 +152,30 @@ class AppContext:
     def imports(self, path: Path) -> ImportTable:
         if path not in self._imports:
             tree = self.tree(path)
-            self._imports[path] = EMPTY_IMPORTS if tree is None else import_table(tree)
+            if tree is None:
+                self._imports[path] = EMPTY_IMPORTS
+            else:
+                self._imports[path] = import_table(tree, package=self.package_name(path))
         return self._imports[path]
+
+    def module_name(self, path: Path) -> str | None:
+        parts = self._src_parts(path)
+        if parts is None:
+            return None
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        return ".".join(parts) or None
+
+    def package_name(self, path: Path) -> str | None:
+        parts = self._src_parts(path)
+        return None if parts is None else ".".join(parts[:-1]) or None
+
+    def _src_parts(self, path: Path) -> tuple[str, ...] | None:
+        try:
+            relative = path.relative_to(self.app_dir / "src")
+        except ValueError:
+            return None
+        return relative.with_suffix("").parts
 
     def calls(self, path: Path) -> Iterator[tuple[str, int]]:
         tree = self.tree(path)

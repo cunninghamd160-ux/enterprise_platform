@@ -1,0 +1,14 @@
+from fastapi import APIRouter
+
+from insights_platform.auth import require_team
+
+from . import repository
+from .schemas import CompensationRow
+
+router = APIRouter()
+
+
+@router.get("/comp")
+@require_team("platform")
+async def compensation() -> list[CompensationRow]:
+    return [CompensationRow.model_validate(dict(row)) for row in await repository.list_comp()]

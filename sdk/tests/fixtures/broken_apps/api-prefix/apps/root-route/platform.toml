@@ -1,0 +1,6 @@
+[app]
+name = "root-route"
+team = "people-analytics"
+kind = "web"
+scaffold_version = "0.3.0"
+connections = ["warehouse"]

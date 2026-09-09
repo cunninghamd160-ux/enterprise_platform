@@ -1,0 +1,11 @@
+from collections.abc import Sequence
+
+from sqlalchemy import RowMapping, text
+
+from insights_platform.data import get_engine
+
+
+async def list_headcount() -> Sequence[RowMapping]:
+    async with get_engine("warehouse").connect() as conn:
+        result = await conn.execute(text("select team, month, count from headcount"))
+        return result.mappings().all()

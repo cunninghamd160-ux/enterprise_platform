@@ -1,0 +1,5 @@
+from ..headcount.repository import list_headcount
+
+
+async def team_count() -> int:
+    return len({row["team"] for row in await list_headcount()})

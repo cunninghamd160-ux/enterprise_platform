@@ -1,0 +1,6 @@
+from . import repository
+from .schemas import CompensationRow
+
+
+async def list_comp() -> list[CompensationRow]:
+    return [CompensationRow.model_validate(dict(row)) for row in await repository.list_comp()]

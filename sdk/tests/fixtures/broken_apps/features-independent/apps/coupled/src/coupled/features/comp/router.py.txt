@@ -1,0 +1,13 @@
+from fastapi import APIRouter
+
+from insights_platform.auth import require_team
+
+from . import service
+
+router = APIRouter()
+
+
+@router.get("/comp")
+@require_team("platform")
+async def compensation() -> dict[str, int]:
+    return {"teams": await service.team_count()}

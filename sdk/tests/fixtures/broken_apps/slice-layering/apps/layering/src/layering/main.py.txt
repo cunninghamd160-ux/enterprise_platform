@@ -1,0 +1,6 @@
+from insights_platform.web import create_app
+
+from .features import comp
+
+app = create_app()
+app.include_router(comp.router, prefix="/api")
