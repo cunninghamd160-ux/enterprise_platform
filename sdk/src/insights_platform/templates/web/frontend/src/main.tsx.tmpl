@@ -1,0 +1,15 @@
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+
+import { Records } from "./pages/Records";
+import "./index.css";
+
+const root = document.getElementById("root");
+if (root === null) {
+  throw new Error("index.html has no #root element");
+}
+createRoot(root).render(
+  <StrictMode>
+    <Records />
+  </StrictMode>,
+);

@@ -25,7 +25,7 @@ repos:
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        args: [--baseline, .secrets.baseline]
+        args: [--baseline, .secrets.baseline, --exclude-files, 'package-lock\.json(\.tmpl)?$']
   - repo: local
     hooks:
       - id: insights-check
@@ -34,3 +34,37 @@ repos:
         language: system
         pass_filenames: false
         files: ^apps/
+      # Both frontend hooks run the app's own toolchain from its frontend/ directory, so the
+      # versions pinned in its package-lock.json are the ones that judge it.
+      - id: frontend-eslint
+        name: frontend eslint
+        language: system
+        files: ^apps/[^/]+/frontend/.*\.(ts|tsx)$
+        exclude: package-lock\.json$
+        entry: >-
+          bash -c '
+          status=0;
+          for dir in $(printf "%s\n" "$@" | sed -E "s#^(apps/[^/]+/frontend)/.*#\1#" | sort -u); do
+            if [ ! -d "$dir/node_modules" ]; then
+              echo "$dir/node_modules is missing; run: npm ci --prefix $dir"; status=1; continue;
+            fi;
+            files=$(printf "%s\n" "$@" | grep "^$dir/" | sed "s#^$dir/##");
+            (cd "$dir" && npx eslint $files) || status=1;
+          done;
+          exit $status' --
+      - id: frontend-prettier
+        name: frontend prettier
+        language: system
+        files: ^apps/[^/]+/frontend/.*\.(ts|tsx|css|json)$
+        exclude: package-lock\.json$
+        entry: >-
+          bash -c '
+          status=0;
+          for dir in $(printf "%s\n" "$@" | sed -E "s#^(apps/[^/]+/frontend)/.*#\1#" | sort -u); do
+            if [ ! -d "$dir/node_modules" ]; then
+              echo "$dir/node_modules is missing; run: npm ci --prefix $dir"; status=1; continue;
+            fi;
+            files=$(printf "%s\n" "$@" | grep "^$dir/" | sed "s#^$dir/##");
+            (cd "$dir" && npx prettier --check $files) || status=1;
+          done;
+          exit $status' --

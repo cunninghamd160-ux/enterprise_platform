@@ -1,3 +1,4 @@
+import json
 import shutil
 import tomllib
 from importlib.metadata import entry_points
@@ -13,7 +14,7 @@ from insights_platform.cli.new import sdk_pin
 from insights_platform.data.registry import KNOWN_CONNECTIONS
 
 FIXTURES = Path(__file__).parent / "fixtures" / "broken_apps"
-PLACEHOLDERS = ("__NAME__", "__PKG__", "__TEAM__", "__SCAFFOLD_VERSION__")
+PLACEHOLDERS = ("__NAME__", "__PKG__", "__TEAM__", "__SCAFFOLD_VERSION__", "__SDK_PIN__")
 EXPECTED_FILES = (
     "Dockerfile",
     "README.md",
@@ -22,6 +23,23 @@ EXPECTED_FILES = (
     "src/{pkg}/__init__.py",
     "src/{pkg}/main.py",
     "tests/test_main.py",
+)
+FRONTEND_FILES = (
+    "frontend/.env.local",
+    "frontend/.prettierignore",
+    "frontend/eslint.config.js",
+    "frontend/index.html",
+    "frontend/package-lock.json",
+    "frontend/package.json",
+    "frontend/src/api/client.ts",
+    "frontend/src/components/RecordsTable.tsx",
+    "frontend/src/index.css",
+    "frontend/src/main.tsx",
+    "frontend/src/pages/Records.test.tsx",
+    "frontend/src/pages/Records.tsx",
+    "frontend/src/test/setup.ts",
+    "frontend/tsconfig.json",
+    "frontend/vite.config.ts",
 )
 
 runner = CliRunner()
@@ -66,6 +84,22 @@ def files_under(root: Path) -> list[str]:
     return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
 
 
+def expected_files(kind: str, name: str | None = None, *, frontend: bool = True) -> list[str]:
+    pkg = (name or f"demo-{kind}").replace("-", "_")
+    files = [f.format(pkg=pkg) for f in EXPECTED_FILES]
+    if kind == "web" and frontend:
+        files.extend(FRONTEND_FILES)
+    return sorted(files)
+
+
+def assert_fully_substituted(root: Path) -> None:
+    for path in root.rglob("*"):
+        if path.is_file():
+            assert not path.name.endswith(".tmpl"), path
+            text = path.read_text(encoding="utf-8")
+            assert not any(p in text for p in PLACEHOLDERS), path
+
+
 def generate(kind: str, name: str | None = None, *extra: str) -> tuple[Path, str]:
     name = name or f"demo-{kind}"
     result = runner.invoke(app, ["new", name, "--kind", kind, *extra])
@@ -76,15 +110,49 @@ def generate(kind: str, name: str | None = None, *extra: str) -> tuple[Path, str
 @pytest.mark.parametrize("kind", ["web", "job"])
 def test_new_generates_expected_tree(repo: Path, kind: str) -> None:
     target, output = generate(kind, None, "--team", "people-analytics")
-    pkg = f"demo_{kind}"
-    assert files_under(repo / target) == sorted(f.format(pkg=pkg) for f in EXPECTED_FILES)
-    for path in (repo / target).rglob("*"):
-        if path.is_file():
-            assert not path.name.endswith(".tmpl"), path
-            text = path.read_text(encoding="utf-8")
-            assert not any(p in text for p in PLACEHOLDERS), path
+    assert files_under(repo / target) == expected_files(kind)
+    assert_fully_substituted(repo / target)
     assert f"Created {target.as_posix()}" in output
     assert f"uv run insights check {target.as_posix()}" in output
+    assert (f"npm ci --prefix {target.as_posix()}/frontend" in output) == (kind == "web")
+
+
+def test_web_frontend_is_wired_to_its_app(repo: Path) -> None:
+    target, _ = generate("web", None, "--team", "people-analytics")
+    frontend = repo / target / "frontend"
+    dockerfile = (repo / target / "Dockerfile").read_text(encoding="utf-8")
+    assert dockerfile.startswith("FROM node:24-alpine AS frontend\n")
+    assert "COPY --from=frontend /fe/dist apps/demo-web/frontend/dist" in dockerfile
+    assert "## Frontend" in (repo / target / "README.md").read_text(encoding="utf-8")
+    package = json.loads((frontend / "package.json").read_text(encoding="utf-8"))
+    lock = json.loads((frontend / "package-lock.json").read_text(encoding="utf-8"))
+    assert package["name"] == lock["name"] == lock["packages"][""]["name"] == "demo-web"
+    assert lock["packages"][""]["dependencies"] == package["dependencies"]
+    assert lock["packages"][""]["devDependencies"] == package["devDependencies"]
+    lines = (frontend / ".env.local").read_text(encoding="utf-8").splitlines()
+    env_local = {key: value for key, _, value in (line.partition("=") for line in lines)}
+    assert env_local == {"VITE_INSIGHTS_USER": "dev", "VITE_INSIGHTS_TEAM": "people-analytics"}
+
+
+def test_no_frontend_generates_an_api_only_web_app(repo: Path) -> None:
+    target, output = generate("web", None, "--no-frontend")
+    assert files_under(repo / target) == expected_files("web", frontend=False)
+    assert_fully_substituted(repo / target)
+    dockerfile = (repo / target / "Dockerfile").read_text(encoding="utf-8")
+    assert dockerfile.startswith("FROM python:")
+    assert dockerfile.count("FROM ") == 1
+    assert "## Frontend" not in (repo / target / "README.md").read_text(encoding="utf-8")
+    assert "npm" not in output
+
+
+def test_no_frontend_is_a_no_op_for_jobs(repo: Path) -> None:
+    generate("job", "nightly", "--no-frontend")
+    result = runner.invoke(app, ["new", "nightly", "--kind", "job", "--dest", "reference"])
+    assert result.exit_code == 0, result.output
+    flagged, reference = repo / "apps" / "nightly", repo / "reference" / "nightly"
+    assert files_under(flagged) == files_under(reference) == expected_files("job", "nightly")
+    for relative in files_under(flagged):
+        assert (flagged / relative).read_bytes() == (reference / relative).read_bytes(), relative
 
 
 @pytest.mark.parametrize("kind", ["web", "job"])
@@ -109,9 +177,9 @@ def test_new_writes_valid_manifest_and_pyproject(repo: Path, kind: str) -> None:
     ]
 
 
-@pytest.mark.parametrize("kind", ["web", "job"])
-def test_generated_app_passes_platform_check(repo: Path, kind: str) -> None:
-    generate(kind)
+@pytest.mark.parametrize("args", [("web",), ("web", "--no-frontend"), ("job",)])
+def test_generated_app_passes_platform_check(repo: Path, args: tuple[str, ...]) -> None:
+    generate(args[0], None, *args[1:])
     assert violations(repo) == []
 
 
