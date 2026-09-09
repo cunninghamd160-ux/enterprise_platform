@@ -204,3 +204,10 @@ def test_fields_of_returns_caller_and_required_fields_only(
     assert fields["n"] == 1
     assert set(REQUIRED_FIELDS) <= set(fields)
     assert not {"name", "msg", "levelname", "message"} & set(fields)
+
+
+def test_app_loggers_are_namespaced_under_insights(captured: pytest.LogCaptureFixture) -> None:
+    get_logger("demo_job").info("rollup.completed", rows=3)
+    record = captured.records[-1]
+    assert record.name == "insights.demo_job"
+    assert fields_of(record)["rows"] == 3
