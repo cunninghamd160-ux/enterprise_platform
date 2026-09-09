@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import io
 import json
@@ -72,12 +73,15 @@ def only(exporter: InMemorySpanExporter) -> ReadableSpan:
 
 
 def run_query(statement: str) -> None:
-    with data.get_engine("warehouse").connect() as conn:
-        conn.execute(text(statement)).all()
+    async def query() -> None:
+        async with data.get_engine("warehouse").connect() as conn:
+            (await conn.execute(text(statement))).all()
+
+    asyncio.run(query())
 
 
 def send_request(path: str, params: dict[str, str]) -> None:
-    data.get_http_client("hr-api").get(path, params=params)
+    asyncio.run(data.get_http_client("hr-api").get(path, params=params))
 
 
 @pytest.fixture
