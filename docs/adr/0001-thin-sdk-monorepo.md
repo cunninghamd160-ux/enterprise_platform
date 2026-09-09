@@ -49,18 +49,52 @@ lines — so this stays available for a tenant that wants it.
 **Multi-repo with a published package.** The same release model as the decision above, minus the
 colocation, and therefore minus the ability to run every dependent's tests before publishing. Every
 release becomes a bet instead of a test run. Deferred rather than rejected: it is the correct end
-state per tenant, and the trigger is a tenant the workspace cannot hold — one that is not Python, or
-that needs a separate access boundary. `app-check.yml` is a `workflow_call` workflow so the gate
-travels with them.
+state per tenant, and the trigger is a tenant the workspace cannot hold — one that needs a separate
+access boundary, or whose release cadence the support window cannot absorb. A tenant that is not
+Python is not this trigger: a published Python package is no more importable from Node than a
+workspace path is. `app-check.yml` is a `workflow_call` workflow so the gate travels with them.
 
 **Platform as a service / control plane.** Centralizes enforcement and makes upgrades instant and
 unilateral, but is a 24/7 system in the request path of every tenant app, operated by 2–3 engineers
-instead of built by them. Rejected on team size. The slice worth revisiting first is the data
-gateway, because it would make ADR-0005's audit guarantee structural rather than review-backed.
+instead of built by them. The cost is not the network hop; it is shared fate and capacity planning,
+and that a control plane has to be made highly available by someone. Rejected on team size.
 
-**Framework.** Owns the app's structure and lifecycle, which makes every upgrade a migration, makes
-every team's app look the same, and cannot onboard an app that already exists. Rejected: apps should
-stay FastAPI apps or plain scripts.
+**Sidecar.** The same enforcement as a control plane, but a copy runs beside each app instance
+rather than as one shared service: calls are localhost, failure is per-pod instead of fleet-wide,
+and the thing scales with the app rather than being capacity-planned. That property, not the
+localhost hop, is what makes it affordable to a team this size — it needs no rotation, because its
+alerts are the app's alerts. It is also not one decision but four. Observability → viable today at
+zero SDK change, an OTel Collector sidecar, because ADR-0006 already makes OTLP the wire contract.
+SSO → viable, because `sso.py` is already headers to a `Principal`, so a proxy that authenticates
+and sets those headers is a configuration swap. Data access → the valuable one, because a proxy
+holding the credentials would make ADR-0005's audit guarantee structural rather than review-backed,
+and the expensive one, because it has to speak the database's wire protocol. AuthZ → not viable,
+because ADR-0003's check runs at boot against the app's route table and a sidecar does not have it.
+
+Deferred on a precondition rather than a judgement: a sidecar needs a runtime that co-schedules
+containers, and this platform is compose on a single host, so it inherits the trigger already
+recorded against real Kubernetes. Three things would pull it forward — a tenant that is not Python,
+since moving enforcement out of the process is the only thing that reaches a language the SDK
+cannot; a security fix that must cross the fleet without twenty-five teams raising a pull request;
+and enforcement that has to survive an app that is not cooperating, which ADR-0003 says plainly the
+static rules do not. It would not replace the SDK. The end state is a thinner SDK for ergonomics in
+front of a sidecar that holds the credentials, which means this SDK's enforcement claims are
+load-bearing today precisely because there is no sidecar to hold them.
+
+**Framework.** The line is inversion of control: a library is called, a framework calls you and owns
+the entrypoint, the file layout, and the lifecycle. Two tests settle it here. Delete the platform —
+an app built on a library is still an app that fails to import, an app built on a framework is
+handlers with nothing left to attach them to. Adopt it into an app that already exists — `FastAPI()`
+becomes `create_app()`, where a framework needs a rewrite, and five teams already have apps.
+Rejected on both, and on the fact that every lifecycle change would become a migration.
+
+The SDK is not innocent of lifecycle: `create_app()` installs middleware and health routes, and
+`run_job()` owns the context, the metrics, and the exit code. What keeps it a library is that
+`create_app()` is a factory handing back a plain `FastAPI` the app then decorates, and that the app
+still writes its own `__main__` and passes `run_job` a single callable. The one place the SDK does
+behave like a framework is the boot-time route check, which refuses to start an app that left a
+route unmarked. That is deliberate and argued in ADR-0003, and it is the exception that shows where
+the line is.
 
 ## Consequences
 
@@ -77,6 +111,7 @@ Version skew becomes a real state. Up to three SDK versions run in production at
 platform has to know the distribution: apps report their SDK version as a resource attribute, and
 `scaffold-supported` and `sdk-pin-declared` are the checks that keep the tail bounded.
 
-The manifest now carries two version facts that mean different things — `scaffold_version` is what
-generated the app, the pyproject range is what it runs against — and ADR-0002's claim that the SDK
-version is determined by the workspace no longer holds.
+An app now carries two version facts that mean different things and move independently:
+`scaffold_version` in the manifest is what generated it, the range in its `pyproject.toml` is what
+it runs against. Keeping them separate is what lets a team fall behind on the scaffold without
+falling behind on the SDK, and ADR-0002 records only the first for that reason.

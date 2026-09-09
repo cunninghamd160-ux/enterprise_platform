@@ -33,10 +33,10 @@ five files and the platform cannot check they did it right. Rejected on onboardi
 ## Consequences
 
 Templates ship inside the SDK package and are versioned with it, so improving the template is an
-SDK change like any other. `scaffold_version` records what generated the app, which is a different fact from the SDK
-release the app runs against: that one is the pinned range in its `pyproject.toml`
-([ADR-0001](0001-thin-sdk-monorepo.md)). An app can sit two scaffold versions behind and still
-be pinned to the current SDK, so the manifest records only the first.
+SDK change like any other. `scaffold_version` records what generated the app, which is a different
+fact from the SDK release it runs against: that one is the pinned range in its `pyproject.toml`
+([ADR-0001](0001-thin-sdk-monorepo.md)). An app can sit two scaffold versions behind and still be
+pinned to the current SDK, so the manifest records only the first.
 
 The CLI is one more thing to maintain. Token substitution cannot express conditional structure; if
 the `web` and `job` templates ever need more than a name, this decision gets revisited.

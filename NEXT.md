@@ -10,6 +10,7 @@ cleaned up at the end.
 | Real Kubernetes manifests | First environment that isn't a single compose host |
 | Secrets manager integration | First real credential; today every value is a fixture |
 | Service mesh | Never at 5–25 tenants on one shared runtime; revisit if tenants leave it |
+| Sidecar for the auth, data-access and telemetry seams | A runtime that co-schedules containers — same trigger as real Kubernetes. Then any of: a tenant that is not Python, a security fix that must cross the fleet without 25 team PRs, or enforcement that has to survive an uncooperative app (ADR-0001) |
 | Self-service portal UI | ~15 tenants, when scaffold support exceeds an engineer-week per month |
 | Multi-region | A tenant with a data-residency requirement |
 | `insights upgrade` | ~12 apps, when hand-migrating between scaffold versions is the biggest time sink |
