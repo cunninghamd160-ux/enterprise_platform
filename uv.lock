@@ -8,7 +8,9 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "finance-nightly-rollup",
     "insights-platform",
+    "people-analytics-comp",
 ]
 
 [manifest.dependency-groups]
@@ -323,6 +325,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/38/46/126b1831dca12060d
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cc/06/4f138f618dbea66803291274f228f01daf29f306fe8b96bc30dab765df75/filelock-3.32.6-py3-none-any.whl", hash = "sha256:3f16ecd0117feae0dfc147e8c62eb5daeccd8bd800378c3ddf416de9b4feb6b1", size = 100189, upload-time = "2026-09-08T22:57:10.182Z" },
 ]
+
+[[package]]
+name = "finance-nightly-rollup"
+version = "0.1.0"
+source = { editable = "apps/finance-nightly-rollup" }
+dependencies = [
+    { name = "insights-platform" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "insights-platform", editable = "sdk" }]
 
 [[package]]
 name = "googleapis-common-protos"
@@ -880,6 +893,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload-time = "2026-04-27T01:46:07.06Z" },
 ]
+
+[[package]]
+name = "people-analytics-comp"
+version = "0.1.0"
+source = { editable = "apps/people-analytics-comp" }
+dependencies = [
+    { name = "insights-platform" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "insights-platform", editable = "sdk" }]
 
 [[package]]
 name = "platformdirs"

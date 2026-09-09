@@ -1,0 +1,6 @@
+[app]
+name = "finance-nightly-rollup"
+team = "finance"
+kind = "job"
+scaffold_version = "0.1.0"
+connections = ["warehouse"]

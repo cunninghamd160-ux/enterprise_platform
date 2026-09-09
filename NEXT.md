@@ -32,7 +32,16 @@ cleaned up at the end.
 | `insights check` does not track local-name shadowing (a parameter named `httpx`) | Accepted as accidental-not-adversarial per ADR-0003 |
 | No rule stops an app calling `logging.basicConfig` or reconfiguring the root logger | Candidate eighth rule the first time it bites |
 | The SSO stub treats a missing `X-Insights-Team` as `""`, so `require_team` simply denies | A real IdP mapping decides whether team is mandatory |
-| Request contextvars leaked between test modules until `sdk/tests/conftest.py` reset them | Fixed; the wave-2 app test fixtures should do the same |
+| Request contextvars leaked between test modules until `sdk/tests/conftest.py` reset them | Fixed; the testing plugin now snapshots and restores them around every test |
+| The SDK shipped without a `py.typed` marker, so a consumer's `mypy --strict` saw `insights_platform` as untyped — seven errors on a freshly generated app | Fixed: marker added. The per-app CI job (`mypy <app>/src`) is what catches this class of defect |
+| `get_logger("<app package>")` landed outside the `insights` logger the OTel handler is attached to, so an app's own log lines were dropped in production | Fixed (#13): every name is namespaced under `insights.`. Found by running a generated job end to end and noticing `rollup.completed` never appeared |
+| `pytest_plugins` is only honoured in rootdir conftests, so apps could not opt into the testing plugin per directory | Registered as a `pytest11` entry point instead; templates ship no conftest; the plugin also loads into the SDK's own test session |
+| Once counters had data, OTel's atexit metric flush wrote to pytest's already-closed capture stream | Fixed: the plugin shuts OTel down in `pytest_sessionfinish`; any other test process that calls `configure()` needs the same |
+| `observability.configure()` is once per process (first app wins) and `context.app` follows the last `config.load()` | By design: one app per process. CI runs `pytest apps/<x>` per app and root `testpaths` stays `sdk/tests` |
+| `run_job` flushes OTel rather than shutting it down | Global-once providers cannot be rebuilt mid-session; OTel's own atexit handler does the real shutdown in production |
+| `insights_platform.testing` imports `pytest`, a dev-group dependency | Harmless at runtime (apps never import it); an `[project.optional-dependencies] testing` extra would be cleaner |
+| `insights new` echoes `--dest` as given, has no `--force`, and does not run `uv sync` for you; `insights check` has no `--format json` | Add when someone asks |
+| Template test import order relies on ruff classifying app packages as third-party | If `apps/*/src` is ever added to ruff `src`, have `insights new` run `ruff check --fix --select I` on its output |
 
 ## Tools
 
