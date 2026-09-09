@@ -42,6 +42,7 @@ cleaned up at the end.
 | `insights_platform.testing` imports `pytest`, a dev-group dependency | Harmless at runtime (apps never import it); an `[project.optional-dependencies] testing` extra would be cleaner |
 | `insights new` echoes `--dest` as given, has no `--force`, and does not run `uv sync` for you; `insights check` has no `--format json` | Add when someone asks |
 | Template test import order relies on ruff classifying app packages as third-party | If `apps/*/src` is ever added to ruff `src`, have `insights new` run `ruff check --fix --select I` on its output |
+| The fresh-clone test failed on Windows: fixture paths reach 114 characters, and a clone 151 characters deep crossed `MAX_PATH`, so checkout stopped partway and `uv run pytest` found no tests | Documented in the README; shorten the fixture app names if a second person hits it |
 
 ## Tools
 

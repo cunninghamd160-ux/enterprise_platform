@@ -18,6 +18,10 @@ uv run pytest && uv run insights check
 `uv run pytest` runs the SDK's tests. `uv run insights check` runs the platform rules against every
 app under `apps/`. To run one app's tests: `uv run pytest apps/people-analytics-comp`.
 
+Windows: the test fixtures under `sdk/tests/fixtures` reach 114 characters. If you clone deeper than
+about 140 characters, run `git config core.longpaths true` first or the checkout stops partway with
+"Filename too long" and `uv run pytest` finds no tests.
+
 ```sh
 docker compose up
 ```
