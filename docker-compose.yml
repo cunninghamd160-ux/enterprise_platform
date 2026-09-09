@@ -57,6 +57,20 @@ services:
       timeout: 3s
       retries: 10
 
+  # Shared cache, opt-in: docker compose --profile cache up -d redis. Apps cache in process
+  # unless INSIGHTS_CACHE_URL is set; point one here with INSIGHTS_CACHE_URL: redis://redis:6379/0
+  # in its environment. Keys are namespaced <app>:<key> (ADR-0004).
+  redis:
+    image: redis:7-alpine
+    profiles: ["cache"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   warehouse: {}
   postgres: {}
