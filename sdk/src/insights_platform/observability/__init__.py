@@ -1,14 +1,60 @@
 import logging
+from collections.abc import Mapping
+from typing import Final
+
+from opentelemetry import metrics, trace
+from opentelemetry.metrics import Meter
+from opentelemetry.trace import Tracer
+
+from insights_platform import context
+from insights_platform.observability._otel import configure
+
+__all__ = [
+    "REQUIRED_FIELDS",
+    "Logger",
+    "Scalar",
+    "configure",
+    "fields_of",
+    "get_logger",
+    "get_meter",
+    "get_tracer",
+]
 
 type Scalar = str | int | float | bool | None
+
+REQUIRED_FIELDS: Final = ("app", "team", "principal", "request_id", "trace_id", "span_id")
+
+_SCALAR_TYPES: Final = (str, int, float, bool, type(None))
+_RESERVED_KEYS: Final = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {
+    "message",
+    "asctime",
+}
+
+
+def _required_fields() -> dict[str, Scalar]:
+    span_context = trace.get_current_span().get_span_context()
+    valid = span_context.is_valid
+    return {
+        "app": context.app.get(),
+        "team": context.team.get(),
+        "principal": context.principal.get(),
+        "request_id": context.request_id.get(),
+        "trace_id": format(span_context.trace_id, "032x") if valid else None,
+        "span_id": format(span_context.span_id, "016x") if valid else None,
+    }
 
 
 class Logger:
     def __init__(self, name: str) -> None:
         self._log = logging.getLogger(name)
 
-    def _emit(self, level: int, event: str, fields: dict[str, Scalar]) -> None:
-        self._log.log(level, event, extra={"fields": fields})
+    def _emit(self, level: int, event: str, fields: Mapping[str, Scalar]) -> None:
+        for key, value in fields.items():
+            if key in _RESERVED_KEYS:
+                raise ValueError(f"log field {key!r} is reserved by the logging record")
+            if not isinstance(value, _SCALAR_TYPES):
+                raise TypeError(f"log field {key!r} must be a scalar, got {type(value).__name__}")
+        self._log.log(level, event, extra={**fields, **_required_fields()})
 
     def info(self, event: str, **fields: Scalar) -> None:
         self._emit(logging.INFO, event, fields)
@@ -22,3 +68,15 @@ class Logger:
 
 def get_logger(name: str) -> Logger:
     return Logger(name)
+
+
+def fields_of(record: logging.LogRecord) -> dict[str, Scalar]:
+    return {k: v for k, v in vars(record).items() if k not in _RESERVED_KEYS}
+
+
+def get_meter(name: str) -> Meter:
+    return metrics.get_meter(name)
+
+
+def get_tracer(name: str) -> Tracer:
+    return trace.get_tracer(name)
