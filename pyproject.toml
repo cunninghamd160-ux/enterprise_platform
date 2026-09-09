@@ -1,0 +1,49 @@
+[tool.uv.workspace]
+members = ["sdk", "apps/*"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["sdk/src"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "N",        # pep8-naming
+    "S",        # bandit
+    "C4",       # comprehensions
+    "SIM",      # simplify
+    "ARG",      # unused arguments
+    "PTH",      # pathlib over os.path
+    "ERA",      # commented-out code
+    "T20",      # print
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "ARG"]
+"sdk/src/insights_platform/cli/**" = ["T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["insights_platform"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["sdk/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["sdk/tests"]
+addopts = "-ra --strict-markers"

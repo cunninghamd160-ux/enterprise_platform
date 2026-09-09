@@ -1,0 +1,10 @@
+name: Setup
+description: Install uv and the pinned Python, then sync the workspace from the lockfile.
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+    - run: uv sync --frozen
+      shell: bash
