@@ -31,6 +31,7 @@ def check(
         repo_root=root,
         known_connections=frozenset(KNOWN_CONNECTIONS),
         current_scaffold_version=__version__,
+        sdk_version=__version__,
     )
     for violation in violations:
         typer.echo(str(violation))

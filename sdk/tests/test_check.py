@@ -8,6 +8,7 @@ from insights_platform.check import RULES, Violation, discover_apps, run
 FIXTURES = Path(__file__).parent / "fixtures" / "broken_apps"
 KNOWN = frozenset({"warehouse", "hr-api"})
 CURRENT = "0.3.0"
+PIN = ">=0.3,<0.4"
 
 
 def materialize(fixture_dir: Path, dest: Path) -> Path:
@@ -28,10 +29,18 @@ def check(repo_root: Path) -> list[Violation]:
         repo_root=repo_root,
         known_connections=KNOWN,
         current_scaffold_version=CURRENT,
+        sdk_version=CURRENT,
     )
 
 
-def make_app(repo_root: Path, name: str, source: str, *, scaffold_version: str = CURRENT) -> Path:
+def make_app(
+    repo_root: Path,
+    name: str,
+    source: str,
+    *,
+    scaffold_version: str = CURRENT,
+    pin: str = PIN,
+) -> Path:
     app = repo_root / "apps" / name
     pkg = app / "src" / name.replace("-", "_")
     pkg.mkdir(parents=True)
@@ -42,6 +51,12 @@ def make_app(repo_root: Path, name: str, source: str, *, scaffold_version: str =
         'kind = "web"\n'
         f'scaffold_version = "{scaffold_version}"\n'
         'connections = ["warehouse"]\n'
+    )
+    (app / "pyproject.toml").write_text(
+        "[project]\n"
+        f'name = "{name}"\n'
+        'version = "0.1.0"\n'
+        f'dependencies = ["insights-platform{pin}"]\n'
     )
     (pkg / "main.py").write_text(source)
     return app
@@ -56,6 +71,7 @@ def test_rules_are_in_table_order() -> None:
         "apps-independent",
         "manifest-valid",
         "scaffold-supported",
+        "sdk-pin-declared",
     ]
 
 
@@ -69,6 +85,7 @@ def test_rules_are_in_table_order() -> None:
         ("apps-independent", "ADR-0004", 1),
         ("manifest-valid", "ADR-0002", 4),
         ("scaffold-supported", "ADR-0001", 1),
+        ("sdk-pin-declared", "ADR-0001", 1),
     ],
 )
 def test_broken_fixture_fires_exactly_its_rule(
@@ -151,8 +168,15 @@ def test_sdk_must_not_import_app_packages(tmp_path: Path) -> None:
 def test_missing_manifest_is_reported(tmp_path: Path) -> None:
     app = tmp_path / "apps" / "nomanifest"
     (app / "src" / "nomanifest").mkdir(parents=True)
+    (app / "pyproject.toml").write_text(
+        '[project]\nname = "nomanifest"\ndependencies = ["insights-platform>=0.3,<0.4"]\n'
+    )
     violations = run(
-        [app], repo_root=tmp_path, known_connections=KNOWN, current_scaffold_version=CURRENT
+        [app],
+        repo_root=tmp_path,
+        known_connections=KNOWN,
+        current_scaffold_version=CURRENT,
+        sdk_version=CURRENT,
     )
     assert [v.rule for v in violations] == ["manifest-valid"]
     assert "missing" in violations[0].message
@@ -182,3 +206,45 @@ def test_scaffold_support_window(tmp_path: Path, version: str, supported: bool) 
     make_app(tmp_path, "s", "", scaffold_version=version)
     rules = [v.rule for v in check(tmp_path)]
     assert ("scaffold-supported" in rules) is (not supported)
+
+
+@pytest.mark.parametrize(
+    ("pin", "ok"),
+    [
+        (">=0.3,<0.4", True),
+        ("==0.3.0", True),
+        (">=0.1,<0.2", False),
+        (">=9", False),
+        ("", False),
+    ],
+)
+def test_pin_must_admit_the_current_sdk_release(tmp_path: Path, pin: str, ok: bool) -> None:
+    make_app(tmp_path, "pinned", "", pin=pin)
+    assert ("sdk-pin-declared" in [v.rule for v in check(tmp_path)]) is (not ok)
+
+
+def test_missing_pyproject_is_reported(tmp_path: Path) -> None:
+    app = make_app(tmp_path, "nopyproject", "")
+    (app / "pyproject.toml").unlink()
+    (violation,) = check(tmp_path)
+    assert violation.rule == "sdk-pin-declared"
+    assert str(violation).endswith("(apps/nopyproject/pyproject.toml)")
+
+
+def test_app_not_depending_on_the_sdk_is_reported(tmp_path: Path) -> None:
+    app = make_app(tmp_path, "unpinned", "")
+    (app / "pyproject.toml").write_text(
+        '[project]\nname = "unpinned"\nversion = "0.1.0"\ndependencies = ["httpx"]\n'
+    )
+    (violation,) = check(tmp_path)
+    assert violation.rule == "sdk-pin-declared"
+    assert "declares no dependency" in violation.message
+
+
+def test_pin_matching_ignores_name_normalisation(tmp_path: Path) -> None:
+    app = make_app(tmp_path, "normalised", "")
+    (app / "pyproject.toml").write_text(
+        '[project]\nname = "normalised"\nversion = "0.1.0"\n'
+        'dependencies = ["Insights_Platform>=0.3,<0.4"]\n'
+    )
+    assert check(tmp_path) == []

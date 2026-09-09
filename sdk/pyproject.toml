@@ -12,6 +12,7 @@ dependencies = [
     "opentelemetry-instrumentation-httpx",
     "opentelemetry-instrumentation-sqlalchemy",
     "opentelemetry-sdk>=1.28",
+    "packaging>=24.0",
     "sqlalchemy>=2.0",
     "typer>=0.12",
     "uvicorn>=0.32",

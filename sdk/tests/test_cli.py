@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 import insights_platform
 from insights_platform.check import discover_apps, run
 from insights_platform.cli import app
+from insights_platform.cli.new import sdk_pin
 from insights_platform.data.registry import KNOWN_CONNECTIONS
 
 FIXTURES = Path(__file__).parent / "fixtures" / "broken_apps"
@@ -56,6 +57,7 @@ def violations(repo_root: Path) -> list[str]:
             repo_root=repo_root,
             known_connections=frozenset(KNOWN_CONNECTIONS),
             current_scaffold_version=insights_platform.__version__,
+            sdk_version=insights_platform.__version__,
         )
     ]
 
@@ -98,7 +100,9 @@ def test_new_writes_valid_manifest_and_pyproject(repo: Path, kind: str) -> None:
     }
     pyproject = tomllib.loads((repo / target / "pyproject.toml").read_text(encoding="utf-8"))
     assert pyproject["project"]["name"] == f"demo-{kind}"
-    assert pyproject["project"]["dependencies"] == ["insights-platform"]
+    assert pyproject["project"]["dependencies"] == [
+        f"insights-platform{sdk_pin(insights_platform.__version__)}"
+    ]
     assert pyproject["tool"]["uv"]["sources"]["insights-platform"] == {"workspace": True}
     assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == [
         f"src/demo_{kind}"
@@ -193,3 +197,11 @@ def test_console_script_and_pytest_plugin_are_registered() -> None:
     assert scripts["insights"] == "insights_platform.cli:app"
     plugins = {ep.name: ep.value for ep in entry_points(group="pytest11")}
     assert plugins["insights_platform"] == "insights_platform.testing"
+
+
+@pytest.mark.parametrize(
+    ("version", "pin"),
+    [("0.1.0", ">=0.1,<0.2"), ("0.9.3", ">=0.9,<0.10"), ("2.0.0", ">=2.0,<2.1")],
+)
+def test_sdk_pin_admits_the_release_and_its_patches(version: str, pin: str) -> None:
+    assert sdk_pin(version) == pin

@@ -1,0 +1,6 @@
+[app]
+name = "stale-pin"
+team = "platform"
+kind = "web"
+scaffold_version = "0.3.0"
+connections = ["warehouse"]

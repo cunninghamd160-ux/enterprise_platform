@@ -21,6 +21,7 @@ def run(
     repo_root: Path,
     known_connections: frozenset[str],
     current_scaffold_version: str,
+    sdk_version: str,
 ) -> list[Violation]:
     shared: dict[str, Any] = {}
     violations: list[Violation] = []
@@ -30,6 +31,7 @@ def run(
             repo_root,
             known_connections=known_connections,
             current_scaffold_version=current_scaffold_version,
+            sdk_version=sdk_version,
             shared=shared,
         )
         for rule in RULES:
