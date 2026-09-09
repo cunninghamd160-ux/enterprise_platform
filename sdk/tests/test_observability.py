@@ -176,6 +176,8 @@ def test_console_log_output_is_one_json_object_per_line(monkeypatch: pytest.Monk
 
 
 def test_exported_attributes_drop_none_and_keep_stream() -> None:
+    for var in (context.app, context.team, context.principal, context.request_id):
+        var.set(None)
     exporter = InMemoryLogRecordExporter()
     provider = LoggerProvider()
     provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
